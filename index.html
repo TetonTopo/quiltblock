@@ -1,0 +1,283 @@
+<title>QuiltBlock Studio</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700;12..96,800&family=Public+Sans:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="apps/web/styles.css">
+
+<header class="top print-hide">
+  <div class="wrap">
+    <a class="brand" href="#home" aria-label="QuiltBlock Studio, home">
+      <svg viewBox="0 0 26 26" aria-hidden="true">
+        <rect x="1" y="1" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.6"/>
+        <polygon points="1,1 25,1 1,25" fill="currentColor" opacity=".9"/>
+        <polygon points="13,13 25,13 25,25" fill="currentColor" opacity=".45"/>
+      </svg>
+      QuiltBlock
+    </a>
+    <span class="demo-pill">Demo</span>
+    <nav aria-label="Main">
+      <a href="#home" data-nav="home">Home</a>
+      <a href="#patterns" data-nav="patterns">Patterns</a>
+      <a href="#custom" data-nav="custom">Make your own</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ============================ HOME ============================ -->
+  <section class="view" id="view-home">
+    <div class="hero">
+      <div class="hero-copy">
+        <span class="eyebrow">Modern quilt block patterns</span>
+        <h1>Any picture, cut into straight lines.</h1>
+        <p>Pick a block you love or describe the one nobody has made yet. Every pattern
+          comes out labelled piece by piece with exact cut sizes, the seams already
+          worked out, and a pressing plan that tells you which way to lean each one.</p>
+        <div class="btn-row">
+          <a class="btn" href="#patterns">Browse patterns</a>
+          <a class="btn ghost" href="#custom">Make a custom block</a>
+        </div>
+        <p class="muted" style="font-size:.9rem">Every block on this page is drawn live by the
+          pattern engine, not pasted in as a picture. Change the seam allowance and every
+          number on the cutting list changes with it.</p>
+      </div>
+      <div class="mat" id="hero-block"></div>
+    </div>
+
+    <div class="rules" id="house-rules"></div>
+
+    <div class="steps">
+      <div class="row-between">
+        <h2>How a custom block gets made</h2>
+      </div>
+      <ol>
+        <li><strong>Describe it</strong><span class="muted">“A Highland cow, side profile, on skis.” Or upload a photo.</span></li>
+        <li><strong>Simplify</strong><span class="muted">Colours collapse to a handful of fabrics. Fur becomes big flat shapes.</span></li>
+        <li><strong>Snap to the grid</strong><span class="muted">Shapes become squares, triangles, hourglasses and flying geese.</span></li>
+        <li><strong>Check the rules</strong><span class="muted">No curves, nothing too small to sew, piece count kept sane. Then the PDF.</span></li>
+      </ol>
+    </div>
+
+    <div class="steps">
+      <div class="row-between">
+        <h2>A few blocks to start</h2>
+        <a href="#patterns">See all patterns</a>
+      </div>
+      <div class="grid" id="featured" style="margin-top:18px"></div>
+    </div>
+  </section>
+
+  <!-- ========================== PATTERNS ========================== -->
+  <section class="view" id="view-patterns" hidden>
+    <div class="row-between" style="margin-bottom:20px">
+      <div>
+        <span class="eyebrow">Pattern library</span>
+        <h2>Blocks, ready to cut</h2>
+      </div>
+      <div class="chips" id="filters" role="group" aria-label="Filter by subject"></div>
+    </div>
+    <div class="grid" id="catalog"></div>
+  </section>
+
+  <!-- =========================== DETAIL =========================== -->
+  <section class="view" id="view-detail" hidden>
+    <button class="back print-hide" id="back">&larr; Back to patterns</button>
+    <div class="detail-head" style="margin-top:14px">
+      <span class="eyebrow" id="d-subject"></span>
+      <h2 id="d-name"></h2>
+      <p class="muted" id="d-blurb"></p>
+    </div>
+
+    <div class="detail">
+      <div class="stack" style="gap:16px">
+        <div class="toggle" role="group" aria-label="Preview">
+          <button id="mode-block" aria-pressed="true">Single block</button>
+          <button id="mode-quilt" aria-pressed="false">As a quilt</button>
+          <button id="mode-press" aria-pressed="false">Seams &amp; pressing</button>
+        </div>
+        <div class="mat" id="d-svg"></div>
+        <div id="d-legend"></div>
+        <div class="swatches" id="d-swatches"></div>
+      </div>
+
+      <div class="stack" style="gap:18px">
+        <dl class="facts" id="d-facts"></dl>
+
+        <div class="bench">
+          <div class="row-between">
+            <h3 style="font-size:1rem">The workbench</h3>
+            <span class="eyebrow">changes every number below</span>
+          </div>
+          <div class="bench-grid">
+            <div class="field">
+              <label for="f-seam">Seam allowance</label>
+              <select id="f-seam"></select>
+            </div>
+            <div class="field">
+              <label for="f-trim">Triangle margin</label>
+              <select id="f-trim"></select>
+            </div>
+            <div class="field">
+              <label for="f-size">Block size</label>
+              <select id="f-size">
+                <option value="10">10" finished</option>
+                <option value="12" selected>12" finished</option>
+                <option value="16">16" finished</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="f-copies">Blocks in the quilt</label>
+              <select id="f-copies">
+                <option value="1">1 block</option>
+                <option value="4">4 &mdash; baby quilt</option>
+                <option value="12" selected>12 &mdash; throw (4 &times; 3)</option>
+                <option value="30">30 &mdash; queen (6 &times; 5)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="f-method">Piecing method</label>
+              <select id="f-method">
+                <option value="patchwork" selected>Conventional patchwork</option>
+                <option value="fpp">Foundation paper piecing</option>
+              </select>
+            </div>
+          </div>
+          <p class="note" id="seam-note"></p>
+        </div>
+
+        <div class="tally" id="d-tally"></div>
+
+        <div class="buy print-hide">
+          <div class="row-between">
+            <span class="amount" id="d-price"></span>
+            <span class="muted" style="font-size:.88rem">Instant PDF download</span>
+          </div>
+          <button class="btn rule" id="buy">Buy this pattern</button>
+          <button class="btn ghost" id="preview-pdf">Preview the printable pattern</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="d-seams" style="margin-top:36px"></div>
+    <div id="d-cuts"></div>
+    <div id="d-order" style="margin-top:8px"></div>
+  </section>
+
+  <!-- =========================== CUSTOM =========================== -->
+  <section class="view" id="view-custom" hidden>
+    <div class="row-between" style="margin-bottom:22px">
+      <div>
+        <span class="eyebrow">Make your own</span>
+        <h2>Describe the block you can&rsquo;t find anywhere</h2>
+      </div>
+      <span class="demo-pill" id="gen-mode">checking generator&hellip;</span>
+    </div>
+    <div class="custom">
+      <form class="prompt" id="prompt-form">
+        <label for="prompt-text" class="eyebrow">What should be on the block?</label>
+        <textarea id="prompt-text" placeholder="A cow with skis on, side profile, four fabrics">a cow with skis on</textarea>
+        <div class="chips" aria-label="Try one of these">
+          <button type="button" class="chip" data-try="a cow with skis on">cow with skis</button>
+          <button type="button" class="chip" data-try="a coffee mug">coffee mug</button>
+          <button type="button" class="chip" data-try="a sitting cat">sitting cat</button>
+          <button type="button" class="chip" data-try="a sailboat">sailboat</button>
+          <button type="button" class="chip" data-try="a mountain with snow">mountain</button>
+        </div>
+        <div class="upload">
+          <strong>Or start from a photo</strong>
+          <span>The photo is simplified to a handful of fabrics, then snapped to straight lines.</span>
+          <input type="file" id="prompt-photo" accept="image/*">
+        </div>
+        <div class="bench-grid">
+          <div class="field">
+            <label for="f-fabrics">Fabric limit</label>
+            <select id="f-fabrics">
+              <option>3</option><option selected>4</option><option>5</option>
+              <option>6</option><option>7</option><option>8</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="f-grid">Detail</label>
+            <select id="f-grid">
+              <option value="6">Coarse &mdash; 6 &times; 6</option>
+              <option value="8" selected>Standard &mdash; 8 &times; 8</option>
+              <option value="10">Fine &mdash; 10 &times; 10</option>
+            </select>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button type="submit" class="btn" id="generate">Generate a block &middot; $35</button>
+        </div>
+        <ul class="progress" id="progress" aria-live="polite">
+          <li data-step="0">Reading the request</li>
+          <li data-step="1">Simplifying to flat shapes</li>
+          <li data-step="2">Snapping to straight lines on the grid</li>
+          <li data-step="3">Checking it against the house rules</li>
+        </ul>
+        <div id="gen-error"></div>
+      </form>
+
+      <div class="stack" style="gap:16px">
+        <div class="stage-empty" id="stage-empty">Your block will appear here with its cutting list.</div>
+        <div id="result" hidden class="stack" style="gap:16px">
+          <div class="mat" id="r-svg"></div>
+          <div>
+            <h3 id="r-name"></h3>
+            <p class="muted" id="r-facts" style="font-size:.9rem"></p>
+          </div>
+          <div id="r-checks"></div>
+          <div class="swatches" id="r-swatches"></div>
+          <div class="btn-row">
+            <button class="btn rule" id="r-buy">Buy this block &middot; $35</button>
+            <button class="btn ghost" id="r-open">Open the full pattern</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================== CHECKOUT ========================== -->
+  <section class="view" id="view-checkout" hidden>
+    <div class="sheet">
+      <button class="back" id="checkout-back">&larr; Back</button>
+      <h2>Checkout</h2>
+      <div class="demo-banner">
+        <strong>Nothing here takes real money.</strong>
+        <span>Payment is mocked end to end. There is deliberately no field to type a card
+          number into &mdash; the saved cards below are fictional, and no card data is
+          collected, stored or sent anywhere. Wiring up a real payment processor is the
+          next job, and it runs on the server, never in this page.</span>
+      </div>
+      <div class="panel" id="order-summary"></div>
+      <div class="panel">
+        <h3 style="font-size:1rem">How you&rsquo;d like it</h3>
+        <div class="opts" id="fulfilment-opts"></div>
+        <div id="fulfilment-detail"></div>
+      </div>
+      <div class="panel">
+        <h3 style="font-size:1rem">Payment method</h3>
+        <div class="method" id="payment-methods"></div>
+      </div>
+      <button class="btn rule" id="place-order">Place the (pretend) order</button>
+      <div id="order-result"></div>
+    </div>
+  </section>
+
+  <!-- ============================ PRINT =========================== -->
+  <section class="view" id="view-print" hidden>
+    <div class="print-hide btn-row" style="margin-bottom:18px">
+      <button class="back" id="print-back">&larr; Back</button>
+      <button class="btn ghost" id="do-print">Print this</button>
+    </div>
+    <div class="printable" id="print-body"></div>
+  </section>
+
+  <footer class="print-hide">
+    <span>QuiltBlock Studio &mdash; a working demo. The geometry, the cutting lists, the
+      pressing plans and the printable pattern are real. Payment and shipping are mocked.</span>
+    <span id="engine-line" class="num"></span>
+  </footer>
+</main>
+
+<div class="toast" id="toast" hidden role="status"></div>
+
+<script type="module" src="apps/web/app.js"></script>

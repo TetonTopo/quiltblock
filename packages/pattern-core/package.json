@@ -1,0 +1,18 @@
+{
+  "name": "pattern-core",
+  "version": "0.1.0",
+  "description": "Quilt block geometry: seam allowance math, piecing constructions, cutting lists, sew order and pressing plans.",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "src"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "test": "node test/run.js"
+  }
+}

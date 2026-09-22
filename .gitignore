@@ -1,0 +1,10 @@
+node_modules/
+.netlify/
+dist/
+.DS_Store
+Thumbs.db
+
+# Secrets. The API key lives in the host's environment settings, never here.
+.env
+.env.*
+!.env.example

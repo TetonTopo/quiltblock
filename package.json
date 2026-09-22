@@ -1,0 +1,22 @@
+{
+  "name": "quiltblock",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Quilt block patterns generated from geometry: seam allowances, cutting lists, sew order and pressing plans.",
+  "license": "MIT",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npx --yes serve . --listen 8099",
+    "dev:windows": "powershell -ExecutionPolicy Bypass -File tools/serve.ps1",
+    "test": "node packages/pattern-core/test/run.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.128.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

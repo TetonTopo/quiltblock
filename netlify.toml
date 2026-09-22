@@ -1,0 +1,16 @@
+# The site is plain static files plus two serverless functions - there is no
+# build step, because the app is ES modules the browser runs directly.
+
+[build]
+  publish = "."
+  command = "echo 'no build step'"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
