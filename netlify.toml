@@ -14,3 +14,19 @@
   [headers.values]
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
+
+# The publish directory is the repo root, because that is where the app lives.
+# A git-based deploy only ever uploads committed files, and .env is gitignored,
+# so it cannot reach the CDN that way. A deploy made with the CLI from a machine
+# that does have a .env is a different story, so refuse to serve one outright.
+[[redirects]]
+  from = "/.env"
+  to = "/"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/.env.*"
+  to = "/"
+  status = 404
+  force = true
