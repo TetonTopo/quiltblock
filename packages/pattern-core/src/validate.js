@@ -11,11 +11,13 @@
 
 import { fmt } from './units.js';
 import { seamMath } from './seams.js';
+import { tierOfScore } from './tiers.js';
 
 export const LIMITS = {
   maxFabrics: 8,
   maxFabricsHard: 50,
-  maxPieces: 60,
+  /** The advanced tier lives up near this; a feathered star is 70-odd pieces. */
+  maxPieces: 80,
   comfortablePieces: 30,
   minPieces: 8,
   /** Anything under 3/4" finished is miserable to sew and worse to press. */
@@ -93,7 +95,7 @@ export function validateBlock(block, { seam, trim, limits = {} } = {}) {
 
   // --- nothing too small to sew -------------------------------------------
   for (const u of block.units) {
-    const small = Math.min(u.w, u.h);
+    const small = Math.min(u.w, u.h, ...(u.corners ?? []).map((k) => k.size));
     if (small < L.minFinished) {
       errors.push({
         rule: 'min-size',
@@ -145,15 +147,17 @@ function polygonArea(poly) {
 /**
  * Difficulty is piece count plus a penalty for bias edges, because triangles
  * stretch and squares don't. A 20-piece block of squares is a beginner block;
- * a 20-piece block that is all half-square triangles is not.
+ * a 20-piece block that is all half-square triangles is not. A stitch-and-flip
+ * corner is a bias seam on a stable base, so it costs a third of a triangle.
+ * Small pieces cost extra too: an inch-wide strip is fiddlier than a four-inch one.
  */
 export function difficultyOf(block) {
   const triangles = block.units.filter((u) => u.kind !== 'patch').length;
-  const score = block.pieces.length + triangles * 1.5;
-  if (score <= 18) return { level: 'Beginner', score };
-  if (score <= 32) return { level: 'Confident beginner', score };
-  if (score <= 52) return { level: 'Intermediate', score };
-  return { level: 'Advanced', score };
+  const corners = block.units.reduce((s, u) => s + (u.corners?.length ?? 0), 0);
+  const tiny = block.units.filter((u) => Math.min(u.w, u.h) < 24).length; // under 1½"
+  const score = block.pieces.length + triangles * 1.5 + corners * 0.5 + tiny * 0.5;
+  const tier = tierOfScore(score);
+  return { level: tier.name, tier: tier.id, score };
 }
 
 export { polygonArea };

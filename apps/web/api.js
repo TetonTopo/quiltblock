@@ -31,13 +31,13 @@ export function generatorStatus() {
  * Ask the server to design a block. Returns a block definition in the grid DSL
  * that `pattern-core` can build, plus whatever the model said about it.
  */
-export async function generate({ prompt, photo, fabricLimit, gridSize, blockSize }) {
+export async function generate({ prompt, photo, fabricLimit, gridSize, blockSize, tier }) {
   const status = await generatorStatus();
   if (!status.available) {
-    return { ...(await mockGenerate({ prompt, fabricLimit, gridSize })), mock: true };
+    return { ...(await mockGenerate({ prompt, fabricLimit, gridSize, tier })), mock: true };
   }
 
-  const body = { prompt, fabricLimit, gridSize, blockSize };
+  const body = { prompt, fabricLimit, gridSize, blockSize, tier };
   if (photo) body.photo = photo; // { media_type, data } base64, no data: prefix
 
   const res = await fetch(`${API_BASE}/generate`, {
@@ -64,29 +64,52 @@ export class GenerateError extends Error {
 /**
  * The local stand-in. It matches the request against the starter library, which
  * is honest about what it is: a lookup, not a designer. It exists so the demo
- * works with no key, no network and no account.
+ * works with no key, no network and no account. It does respect the skill
+ * level, by preferring a library block in that tier.
  */
-async function mockGenerate({ prompt, fabricLimit, gridSize }) {
-  const { LIBRARY } = await import('../../packages/pattern-core/src/blocks.js');
+async function mockGenerate({ prompt, fabricLimit, gridSize, tier }) {
+  const { LIBRARY, makePattern, TIER_ORDER } = await import('../../packages/pattern-core/src/index.js');
   const p = String(prompt || '').toLowerCase();
   const match =
     (/ski/.test(p) && 'cowskis') ||
-    (/mug|coffee|cup|tea/.test(p) && 'mug') ||
+    (/mug|coffee/.test(p) && 'mug') ||
+    (/teapot|kettle/.test(p) && 'teapot') ||
+    (/cup|tea/.test(p) && 'teacup') ||
     (/cat|kitten/.test(p) && 'cat') ||
+    (/chicken|hen|rooster|bird/.test(p) && 'chicken') ||
     (/boat|sail|ship/.test(p) && 'sailboat') ||
     (/mountain|peak|alp/.test(p) && 'mountain') ||
+    (/leaf|maple|autumn|fall/.test(p) && 'maple-leaf') ||
     (/tree|pine|forest|spruce/.test(p) && 'pine') ||
     (/barn|house|shed/.test(p) && 'barn') ||
+    (/cow/.test(p) && 'cow') ||
+    (/bear|paw/.test(p) && 'bear-paw') ||
+    (/goose|geese|dutch/.test(p) && 'dutchmans-puzzle') ||
+    (/wave|ocean|sea/.test(p) && 'ocean-waves') ||
+    (/lake|lady/.test(p) && 'lady-of-the-lake') ||
+    (/log|cabin/.test(p) && 'log-cabin') ||
+    (/nine|patch/.test(p) && 'nine-patch') ||
     (/star/.test(p) && 'sawtooth-star') ||
-    'cow';
+    null;
+
+  let def = match ? LIBRARY.find((b) => b.id === match) : null;
+  if (!def && tier) {
+    // No subject matched: hand back something at the level they asked for.
+    const want = TIER_ORDER.indexOf(tier);
+    const candidates = LIBRARY.filter((b) => !b.custom && TIER_ORDER.indexOf(makePattern(b).tier.id) === want);
+    def = candidates[Math.floor(Math.random() * candidates.length)] ?? LIBRARY[0];
+  }
+  def = def ?? LIBRARY[0];
 
   await new Promise((r) => setTimeout(r, 260));
-  const def = LIBRARY.find((b) => b.id === match);
   return {
-    block: { ...def, id: `custom-${match}`, custom: true, subject: 'Custom' },
-    notes: `Matched “${prompt}” to the closest block in the starter library.`,
+    block: { ...def, id: `custom-${def.id}`, custom: true, subject: 'Custom' },
+    notes: match
+      ? `Matched “${prompt}” to the closest block in the starter library.`
+      : `Nothing in the library matched “${prompt}”, so here is a ${tier ?? 'confident'} level block instead.`,
     fabricLimit,
     gridSize,
+    tier,
   };
 }
 

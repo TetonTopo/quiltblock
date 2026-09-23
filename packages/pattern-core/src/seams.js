@@ -165,6 +165,13 @@ export function seamMath(seamId = DEFAULT_SEAM, trimId = DEFAULT_TRIM) {
     geeseSmall: (finishedH) => finishedH + diag,
     geesePerSet: 4,
 
+    /**
+     * Stitch-and-flip corners: the square you lay on the corner is the
+     * finished corner leg plus an allowance each side, same as a patch. The
+     * seam runs corner to corner, so there is nothing diagonal to add.
+     */
+    flipSquare: (finishedLeg) => finishedLeg + 2 * a,
+
     /** Strip piecing: strips are cut the finished height plus two allowances. */
     stripWidth: (finishedH) => finishedH + 2 * a,
     subcut: (finishedW) => finishedW + 2 * a,

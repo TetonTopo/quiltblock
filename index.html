@@ -1,3 +1,7 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>QuiltBlock Studio</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700;12..96,800&family=Public+Sans:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
 <link rel="stylesheet" href="apps/web/styles.css">
@@ -27,11 +31,12 @@
   <section class="view" id="view-home">
     <div class="hero">
       <div class="hero-copy">
-        <span class="eyebrow">Modern quilt block patterns</span>
-        <h1>Any picture, cut into straight lines.</h1>
+        <span class="eyebrow">Quilt patterns from geometry</span>
+        <h1>Any picture, cut into straight lines. Any level, from charm squares to a feathered edge.</h1>
         <p>Pick a block you love or describe the one nobody has made yet. Every pattern
           comes out labelled piece by piece with exact cut sizes, the seams already
-          worked out, and a pressing plan that tells you which way to lean each one.</p>
+          worked out, a pressing plan, and the whole quilt planned around it: sashing,
+          borders, yardage, binding.</p>
         <div class="btn-row">
           <a class="btn" href="#patterns">Browse patterns</a>
           <a class="btn ghost" href="#custom">Make a custom block</a>
@@ -47,13 +52,21 @@
 
     <div class="steps">
       <div class="row-between">
+        <h2>Pick your level</h2>
+        <span class="eyebrow">the complexity dial</span>
+      </div>
+      <div class="levels" id="levels"></div>
+    </div>
+
+    <div class="steps">
+      <div class="row-between">
         <h2>How a custom block gets made</h2>
       </div>
       <ol>
-        <li><strong>Describe it</strong><span class="muted">“A Highland cow, side profile, on skis.” Or upload a photo.</span></li>
-        <li><strong>Simplify</strong><span class="muted">Colours collapse to a handful of fabrics. Fur becomes big flat shapes.</span></li>
-        <li><strong>Snap to the grid</strong><span class="muted">Shapes become squares, triangles, hourglasses and flying geese.</span></li>
-        <li><strong>Check the rules</strong><span class="muted">No curves, nothing too small to sew, piece count kept sane. Then the PDF.</span></li>
+        <li><strong>Describe it</strong><span class="muted">“A teapot with a curly spout.” Or upload a photo. Say how hard you want it.</span></li>
+        <li><strong>Simplify</strong><span class="muted">Colours collapse to a handful of fabrics. Curves become corners.</span></li>
+        <li><strong>Snap to the grid</strong><span class="muted">Shapes become squares, stitch-and-flip corners, triangles, hourglasses and flying geese.</span></li>
+        <li><strong>Check the rules</strong><span class="muted">No curves, nothing too small to sew, piece count inside your level. Then the pattern.</span></li>
       </ol>
     </div>
 
@@ -68,13 +81,14 @@
 
   <!-- ========================== PATTERNS ========================== -->
   <section class="view" id="view-patterns" hidden>
-    <div class="row-between" style="margin-bottom:20px">
+    <div class="row-between" style="margin-bottom:14px">
       <div>
         <span class="eyebrow">Pattern library</span>
         <h2>Blocks, ready to cut</h2>
       </div>
       <div class="chips" id="filters" role="group" aria-label="Filter by subject"></div>
     </div>
+    <div class="chips" id="tier-filters" role="group" aria-label="Filter by level" style="margin-bottom:20px"></div>
     <div class="grid" id="catalog"></div>
   </section>
 
@@ -90,9 +104,11 @@
     <div class="detail">
       <div class="stack" style="gap:16px">
         <div class="toggle" role="group" aria-label="Preview">
-          <button id="mode-block" aria-pressed="true">Single block</button>
-          <button id="mode-quilt" aria-pressed="false">As a quilt</button>
+          <button id="mode-block" aria-pressed="true">Block</button>
+          <button id="mode-exploded" aria-pressed="false">Exploded</button>
           <button id="mode-press" aria-pressed="false">Seams &amp; pressing</button>
+          <button id="mode-quilt" aria-pressed="false">As a quilt</button>
+          <button id="mode-coloring" aria-pressed="false">Coloring sheet</button>
         </div>
         <div class="mat" id="d-svg"></div>
         <div id="d-legend"></div>
@@ -118,20 +134,15 @@
             </div>
             <div class="field">
               <label for="f-size">Block size</label>
-              <select id="f-size">
-                <option value="10">10" finished</option>
-                <option value="12" selected>12" finished</option>
-                <option value="16">16" finished</option>
-              </select>
+              <select id="f-size"></select>
             </div>
             <div class="field">
-              <label for="f-copies">Blocks in the quilt</label>
-              <select id="f-copies">
-                <option value="1">1 block</option>
-                <option value="4">4 &mdash; baby quilt</option>
-                <option value="12" selected>12 &mdash; throw (4 &times; 3)</option>
-                <option value="30">30 &mdash; queen (6 &times; 5)</option>
-              </select>
+              <label for="f-corners">Diagonals made by</label>
+              <select id="f-corners"></select>
+            </div>
+            <div class="field">
+              <label for="f-colorway">Colorway</label>
+              <select id="f-colorway"></select>
             </div>
             <div class="field">
               <label for="f-method">Piecing method</label>
@@ -145,6 +156,8 @@
         </div>
 
         <div class="tally" id="d-tally"></div>
+
+        <div class="panel" id="d-units"></div>
 
         <div class="buy print-hide">
           <div class="row-between">
@@ -160,6 +173,129 @@
     <div id="d-seams" style="margin-top:36px"></div>
     <div id="d-cuts"></div>
     <div id="d-order" style="margin-top:8px"></div>
+
+    <!-- ------------------------- the quilt planner ------------------------ -->
+    <div class="planner" id="planner">
+      <div class="row-between">
+        <div>
+          <span class="eyebrow">Plan the whole quilt</span>
+          <h3>From block to quilt</h3>
+        </div>
+        <span class="muted" style="font-size:.88rem" id="q-size-line"></span>
+      </div>
+      <div class="planner-grid">
+        <div class="bench" style="align-self:start">
+          <div class="bench-grid">
+            <div class="field">
+              <label for="q-preset">Quilt size</label>
+              <select id="q-preset"></select>
+            </div>
+            <div class="field">
+              <label for="q-cols">Blocks across</label>
+              <select id="q-cols"></select>
+            </div>
+            <div class="field">
+              <label for="q-rows">Blocks down</label>
+              <select id="q-rows"></select>
+            </div>
+            <div class="field">
+              <label for="q-setting">Setting</label>
+              <select id="q-setting"></select>
+            </div>
+            <div class="field">
+              <label for="q-sashing">Sashing width</label>
+              <select id="q-sashing">
+                <option value="1">1"</option><option value="1.5">1½"</option><option value="2" selected>2"</option>
+                <option value="2.5">2½"</option><option value="3">3"</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="q-inner">Inner border</label>
+              <select id="q-inner">
+                <option value="0" selected>none</option><option value="1">1"</option><option value="1.5">1½"</option>
+                <option value="2">2"</option><option value="2.5">2½"</option><option value="3">3"</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="q-outer">Outer border</label>
+              <select id="q-outer">
+                <option value="0">none</option><option value="2">2"</option><option value="3">3"</option>
+                <option value="4" selected>4"</option><option value="5">5"</option><option value="6">6"</option><option value="8">8"</option>
+              </select>
+            </div>
+          </div>
+          <div class="checks">
+            <label><input type="checkbox" id="q-mirror"> Mirror every other block</label>
+            <label><input type="checkbox" id="q-rainbow"> Rainbow backgrounds, one colour per block</label>
+            <label><input type="checkbox" id="q-pieced"> Set small blocks into the outer border</label>
+          </div>
+          <p class="note" id="q-note"></p>
+        </div>
+        <div class="mat quiltmat" id="q-svg"></div>
+      </div>
+      <div id="q-fabrics"></div>
+      <div id="q-cuts"></div>
+      <div id="q-steps"></div>
+    </div>
+  </section>
+
+  <!-- ========================== HEXAGONS ========================== -->
+  <section class="view" id="view-hex" hidden>
+    <button class="back print-hide" id="hex-back">&larr; Back to patterns</button>
+    <div class="detail-head" style="margin-top:14px">
+      <span class="eyebrow" id="h-subject"></span>
+      <h2 id="h-name"></h2>
+      <p class="muted" id="h-blurb"></p>
+    </div>
+    <div class="callout" style="margin-bottom:22px"><strong>This one breaks the house rules on purpose.</strong>
+      <span>Hexagons meet at 120°, so nothing here is rotary-cut against a ruler. They are sewn by hand
+        over paper templates &mdash; English paper piecing &mdash; and the pattern is a layout, a count and
+        a template rather than a cutting list of rectangles.</span></div>
+    <div class="detail">
+      <div class="stack" style="gap:16px">
+        <div class="mat hexmat" id="h-svg"></div>
+        <div class="swatches" id="h-swatches"></div>
+      </div>
+      <div class="stack" style="gap:18px">
+        <dl class="facts" id="h-facts"></dl>
+        <div class="bench">
+          <div class="row-between">
+            <h3 style="font-size:1rem">The workbench</h3>
+            <span class="eyebrow">changes the count and the template</span>
+          </div>
+          <div class="bench-grid">
+            <div class="field">
+              <label for="h-side">Hexagon size (side)</label>
+              <select id="h-side"></select>
+            </div>
+            <div class="field">
+              <label for="h-layout">Layout</label>
+              <select id="h-layout"></select>
+            </div>
+            <div class="field">
+              <label for="h-width">Finished width</label>
+              <select id="h-width"></select>
+            </div>
+            <div class="field">
+              <label for="h-height">Finished height</label>
+              <select id="h-height"></select>
+            </div>
+          </div>
+          <p class="note" id="h-note"></p>
+        </div>
+        <div class="tally" id="h-tally"></div>
+        <div class="buy print-hide">
+          <div class="row-between">
+            <span class="amount" id="h-price"></span>
+            <span class="muted" style="font-size:.88rem">Layout, count and templates</span>
+          </div>
+          <button class="btn rule" id="h-buy">Buy this pattern</button>
+          <button class="btn ghost" id="h-print">Preview the printable pattern</button>
+        </div>
+      </div>
+    </div>
+    <div id="h-cuts" style="margin-top:36px"></div>
+    <div id="h-steps" style="margin-top:8px"></div>
   </section>
 
   <!-- =========================== CUSTOM =========================== -->
@@ -174,13 +310,13 @@
     <div class="custom">
       <form class="prompt" id="prompt-form">
         <label for="prompt-text" class="eyebrow">What should be on the block?</label>
-        <textarea id="prompt-text" placeholder="A cow with skis on, side profile, four fabrics">a cow with skis on</textarea>
+        <textarea id="prompt-text" placeholder="A teapot with a curly spout, four fabrics">a teapot with a curly spout</textarea>
         <div class="chips" aria-label="Try one of these">
+          <button type="button" class="chip" data-try="a teapot with a curly spout">teapot</button>
           <button type="button" class="chip" data-try="a cow with skis on">cow with skis</button>
-          <button type="button" class="chip" data-try="a coffee mug">coffee mug</button>
-          <button type="button" class="chip" data-try="a sitting cat">sitting cat</button>
-          <button type="button" class="chip" data-try="a sailboat">sailboat</button>
-          <button type="button" class="chip" data-try="a mountain with snow">mountain</button>
+          <button type="button" class="chip" data-try="a chicken on a roost">chicken</button>
+          <button type="button" class="chip" data-try="a maple leaf">maple leaf</button>
+          <button type="button" class="chip" data-try="a feathered star">feathered star</button>
         </div>
         <div class="upload">
           <strong>Or start from a photo</strong>
@@ -189,21 +325,22 @@
         </div>
         <div class="bench-grid">
           <div class="field">
+            <label for="f-tier">Skill level</label>
+            <select id="f-tier"></select>
+          </div>
+          <div class="field">
             <label for="f-fabrics">Fabric limit</label>
             <select id="f-fabrics">
               <option>3</option><option selected>4</option><option>5</option>
-              <option>6</option><option>7</option><option>8</option>
+              <option>6</option><option>7</option><option>8</option><option>10</option>
             </select>
           </div>
           <div class="field">
             <label for="f-grid">Detail</label>
-            <select id="f-grid">
-              <option value="6">Coarse &mdash; 6 &times; 6</option>
-              <option value="8" selected>Standard &mdash; 8 &times; 8</option>
-              <option value="10">Fine &mdash; 10 &times; 10</option>
-            </select>
+            <select id="f-grid"></select>
           </div>
         </div>
+        <p class="note" id="tier-note"></p>
         <div class="btn-row">
           <button type="submit" class="btn" id="generate">Generate a block &middot; $35</button>
         </div>
@@ -211,7 +348,7 @@
           <li data-step="0">Reading the request</li>
           <li data-step="1">Simplifying to flat shapes</li>
           <li data-step="2">Snapping to straight lines on the grid</li>
-          <li data-step="3">Checking it against the house rules</li>
+          <li data-step="3">Checking it against the house rules and your level</li>
         </ul>
         <div id="gen-error"></div>
       </form>
@@ -273,7 +410,7 @@
 
   <footer class="print-hide">
     <span>QuiltBlock Studio &mdash; a working demo. The geometry, the cutting lists, the
-      pressing plans and the printable pattern are real. Payment and shipping are mocked.</span>
+      pressing plans, the quilt maths and the printable pattern are real. Payment and shipping are mocked.</span>
     <span id="engine-line" class="num"></span>
   </footer>
 </main>

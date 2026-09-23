@@ -1,12 +1,13 @@
 # QuiltBlock
 
-Quilt block patterns generated from geometry.
+Quilt patterns generated from geometry.
 
-You pick a block — or describe one nobody has made — and get back a pattern
-that actually sews: every piece labelled with its exact cut size, the seam
+You pick a block — or describe one nobody has made, at the skill level you want
+— and get back a whole quilt pattern that actually sews: every piece labelled with its exact cut size, the seam
 allowance applied correctly for the construction it belongs to, a sew order
 that never asks for a partial seam it did not warn you about, and a pressing
-plan that says which way each seam goes and why.
+plan that says which way each seam goes and why, and the quilt planned around it:
+sashing, borders, yardage as width-of-fabric strips, binding and backing.
 
 There is no image generation anywhere in this project. A quilt pattern is not a
 picture of a quilt; it is a list of shapes and the order you sew them in. The
@@ -28,6 +29,10 @@ is where they live in code. Nothing reaches a customer without passing them.
 - **Difficulty is piece count, not colour count** — and triangles count for more
   than squares, because bias edges stretch and straight grain does not.
 - **Nothing too small to sew.**
+- **Complexity is a dial.** Beginner, confident beginner, intermediate and
+  advanced are computed from the geometry — pieces, bias edges, tiny bits — never
+  typed in. The generator takes the level as an instruction and rejects drafts
+  that land outside it.
 
 ## Seams
 
@@ -48,13 +53,22 @@ built, and the cutting list is costed accordingly:
 | Construction | What you cut | What it yields |
 |---|---|---|
 | Plain patch | finished size + 2 × allowance | 1 |
+| Stitch-and-flip corner | one small square per corner, finished leg + 2 × allowance | the corner |
 | Half-square triangle | one square per fabric, finished leg + ⅞″ | 2 units per pair |
 | Hourglass (quarter-square) | one square per fabric, finished + 1¼″ | 2 units per pair |
 | No-waste flying geese | 1 large square + 4 small | 4 units per set |
 | Foundation paper piecing | rough-cut rectangles, trimmed as you sew | — |
 
 Nobody cuts fourteen triangles. They cut seven squares of each fabric and get
-fourteen units, and the list says so — with the spares called out.
+fourteen units, and the list says so — with the spares called out. And nobody
+cuts a triangle for a teapot's corner either: a one-cell triangle at the corner
+of a run of plain cells is absorbed into the rectangle as a stitch-and-flip
+corner, the way every commercial pattern does it. It is a switch on the
+workbench; half-square triangles waste less fabric, corners are easier.
+
+The whole list is then planned as strips: "(6) strips 3½″ × WOF; subcut (32)
+rectangles 3½″ × 6½″", and yardage is the running length of strips rounded up
+to the next eighth. See [docs/quilts.md](docs/quilts.md).
 
 **Pressing.** Every seam gets a direction and a reason. The default is nesting:
 adjacent seams are pushed in opposite directions so they lock together at the
@@ -182,7 +196,7 @@ packages/pattern-core/
 netlify/functions/generate.js     the generator (holds the API key)
 netlify/functions/checkout.js     payment scaffold, deliberately not wired up
 tools/serve.ps1                   zero-dependency static server for Windows
-docs/                             the grid DSL, deploying, commerce
+docs/                             the grid DSL, quilts, deploying, commerce
 ```
 
 ## The grid DSL
@@ -197,7 +211,13 @@ a\b    half-square triangle, diagonal like "\"
 a+b    hourglass: a top and bottom, b left and right
 a^b    flying goose pointing up, two cells wide
 avb    down      a>b  right      a<b  left
-.      continuation of the multi-cell unit to the left or above
+.      continuation of the multi-cell unit to the left or above;
+       after a/b or a+b, "." cells make it an n×n unit
+
+A one-cell triangle at the corner of a rectangle of its inner fabric becomes a
+stitch-and-flip corner: "k/p p p kp" is a strip of p with both top corners
+clipped. `subgrid: 2` keeps four quarter-blocks from merging into each other.
+Hexagon patterns are their own thing — see docs/quilts.md.
 ```
 
 An Ohio star, whole:

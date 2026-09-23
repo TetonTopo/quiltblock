@@ -12,16 +12,25 @@
  * The model does not get the last word. Whatever comes back is built with
  * `pattern-core` and checked against the house rules - straight lines only,
  * pieces that tile the block exactly, nothing too small to sew, a sane piece
- * count. If it fails, the failure is handed back to the model once, in words,
- * and it tries again. If it fails twice the customer gets an error rather than
- * a pattern that does not sew.
+ * count - and against the skill tier the customer asked for. If it fails, the
+ * failure is handed back to the model once, in words, and it tries again. If
+ * it fails twice the customer gets an error rather than a pattern that does
+ * not sew.
  *
  * Deploy notes are in docs/deploying.md. Set ANTHROPIC_API_KEY in the host's
  * environment settings - never in the repo.
  */
 
 import Anthropic from '@anthropic-ai/sdk';
-import { buildBlock, validateBlock, unitCounts } from '../../packages/pattern-core/src/index.js';
+import {
+  buildBlock,
+  validateBlock,
+  unitCounts,
+  difficultyOf,
+  TIERS,
+  DEFAULT_TIER,
+  tierLimits,
+} from '../../packages/pattern-core/src/index.js';
 
 const MODEL = process.env.QUILTBLOCK_MODEL || 'claude-opus-5';
 const MAX_ATTEMPTS = 2;
@@ -45,19 +54,33 @@ CELL TOKENS
   a>b    flying goose pointing right, TWO cells tall
   a<b    flying goose pointing left, TWO cells tall
   .      continuation cell, required immediately right of a ^ or v goose and
-         immediately below a > or < goose
+         immediately below a > or < goose. A half-square triangle or hourglass
+         can also be made bigger: follow it with "." to the right and fill the
+         rows below with "." to make an n by n triangle unit.
 
 Adjacent plain cells of the same fabric are merged automatically into the
 largest rectangles they form, so large flat areas cost very few pieces. Use that:
 write the picture out cell by cell and let the merging do the work.
+
+STITCH-AND-FLIP CORNERS
+A one-cell half-square triangle sitting at the corner of a rectangle, with the
+rectangle's fabric on its inner side, is sewn as a stitch-and-flip corner: a
+small square laid on the corner and sewn across. That is how commercial
+patterns make every diagonal - a teapot is a square with its four corners
+clipped, a leaf stem is a strip with two corners clipped, a roof is a strip
+with a corner clipped at each end. Draw diagonals that way whenever you can:
+"k/p p p k\\p" is a strip of p with both top corners cut off by k. Two corners
+on one end of a strip make a flying goose; four corners on a square make an
+octagon or a square on point.
 
 THE RULES, WHICH ARE NOT NEGOTIABLE
 1. Straight lines only. Horizontal, vertical, or a true 45 degree diagonal.
    There is no token for a curve because there are no curves.
 2. Flat and crayon-simple. A side-profile silhouette. No shading, no gradients,
    no attempt at three dimensions, no outlines around shapes.
-3. Difficulty is piece count, not colour count. Aim for 12-30 pieces after
-   merging. A big flat background is free; a checkerboard is not.
+3. Difficulty is piece count, not colour count. A big flat background is free;
+   a checkerboard is not. The customer has chosen a skill level, below, and the
+   piece count has to land inside it.
 4. Readability beats detail. At arm's length the subject has to be obvious.
    Legs, ears and chimneys need to be at least one full cell wide.
 5. Modern, not folksy. Solid fabrics, confident colour, plenty of negative space.
@@ -65,12 +88,14 @@ THE RULES, WHICH ARE NOT NEGOTIABLE
 HOW TO WORK
 Sketch the silhouette on the grid in your head first, deciding which rows the
 subject occupies. Put the background in as one fabric so it merges. Use
-half-square triangles only where a diagonal genuinely reads better than a step -
-a roof, an ear, a sail, a hillside. Use flying geese for symmetrical points and
-hourglasses for star centres.
+stitch-and-flip corners for slopes, roofs, ears, spouts and tapers. Use flying
+geese for symmetrical points and hourglasses for star centres. For a
+traditional geometric block, think in units: a star is four geese, four
+corners and a centre; a bear paw is a pad with two claws a side.
 
 Name the fabrics the way a shop would: "Madder red", "Sky blue solid",
 "Oatmeal linen". Give every fabric a hex colour that a quilter could match.
+Say which fabric is the background by naming its key.
 
 Call the draft_block tool exactly once.`;
 
@@ -82,7 +107,7 @@ const BLOCK_TOOL = {
     type: 'object',
     properties: {
       name: { type: 'string', description: 'Short pattern name, e.g. "Cow with skis".' },
-      subject: { type: 'string', description: 'One-word category, e.g. Farm, Pets, Outdoors.' },
+      subject: { type: 'string', description: 'One-word category, e.g. Farm, Pets, Outdoors, Traditional.' },
       blurb: { type: 'string', description: 'One sentence a shop would put under the name.' },
       fabrics: {
         type: 'array',
@@ -99,6 +124,7 @@ const BLOCK_TOOL = {
         },
       },
       accent: { type: 'string', description: 'The fabric key that should vary between blocks in a sampler quilt.' },
+      background: { type: 'string', description: 'The fabric key of the background, which a quilt can rotate through a rainbow.' },
       rows: {
         type: 'array',
         description: 'The grid, one string per row, tokens separated by single spaces.',
@@ -106,7 +132,7 @@ const BLOCK_TOOL = {
       },
       notes: { type: 'string', description: 'What you simplified and why, for the customer.' },
     },
-    required: ['name', 'subject', 'blurb', 'fabrics', 'accent', 'rows', 'notes'],
+    required: ['name', 'subject', 'blurb', 'fabrics', 'accent', 'background', 'rows', 'notes'],
     additionalProperties: false,
   },
 };
@@ -144,9 +170,10 @@ export async function handler(event) {
   const photo = body.photo;
   if (!prompt && !photo) return json(400, { error: 'Send a description or a photo.' });
 
-  const gridSize = clamp(Number(body.gridSize) || 8, 4, 12);
-  const fabricLimit = clamp(Number(body.fabricLimit) || 4, 2, 8);
-  const blockSize = clamp(Number(body.blockSize) || 12, 6, 24);
+  const tier = TIERS[body.tier] ?? TIERS[DEFAULT_TIER];
+  const gridSize = clamp(Number(body.gridSize) || tier.grids[1] || 8, 3, 12);
+  const fabricLimit = clamp(Number(body.fabricLimit) || 4, 2, 10);
+  const blockSize = clamp(Number(body.blockSize) || 12, 6, 36);
 
   const content = [];
   if (photo?.data && /^image\/(png|jpeg|webp|gif)$/.test(photo.media_type || '')) {
@@ -161,7 +188,8 @@ export async function handler(event) {
       `${photo ? 'Turn the photo above into a quilt block. ' : ''}` +
       `${prompt ? `The customer asked for: "${prompt}".` : ''}\n\n` +
       `Use a ${gridSize} by ${gridSize} grid. Use at most ${fabricLimit} fabrics. ` +
-      `The block finishes at ${blockSize} inches.`,
+      `The block finishes at ${blockSize} inches, so a cell is ${(blockSize / gridSize).toFixed(2)} inches.\n\n` +
+      `SKILL LEVEL: ${tier.name}. ${tier.prompt}`,
   });
 
   const messages = [{ role: 'user', content }];
@@ -206,7 +234,7 @@ export async function handler(event) {
 
     const draft = call.input;
     const def = toDefinition(draft);
-    const problem = checkDraft(def, { blockSize, fabricLimit });
+    const problem = checkDraft(def, { blockSize, fabricLimit, tier });
 
     if (!problem) {
       const block = buildBlock(def, { blockSize });
@@ -219,7 +247,9 @@ export async function handler(event) {
           fabrics: block.fabricsUsed.length,
           constructions: unitCounts(block),
           extraSeams: block.merges,
+          difficulty: difficultyOf(block),
         },
+        tier: tier.id,
         model: MODEL,
         attempts: attempt,
         usage: response.usage,
@@ -267,6 +297,7 @@ function toDefinition(draft) {
     blurb: String(draft.blurb ?? ''),
     custom: true,
     accent: typeof draft.accent === 'string' ? draft.accent[0] : undefined,
+    background: typeof draft.background === 'string' ? draft.background[0] : undefined,
     fabrics,
     rows: (draft.rows ?? []).map((r) => String(r)),
   };
@@ -278,10 +309,11 @@ function normaliseHex(hex) {
 }
 
 /**
- * Build it and run the house rules. Returns a sentence describing the first
- * problem, written for the model to act on, or null if the block is good.
+ * Build it and run the house rules, plus the tier's own limits. Returns a
+ * sentence describing the first problem, written for the model to act on, or
+ * null if the block is good.
  */
-function checkDraft(def, { blockSize, fabricLimit }) {
+function checkDraft(def, { blockSize, fabricLimit, tier }) {
   let block;
   try {
     block = buildBlock(def, { blockSize });
@@ -289,11 +321,29 @@ function checkDraft(def, { blockSize, fabricLimit }) {
     return String(err.message);
   }
 
-  const v = validateBlock(block);
+  const limits = tier ? tierLimits(tier) : {};
+  const v = validateBlock(block, { limits });
   if (v.errors.length) return v.errors.map((e) => e.message).join(' ');
 
   if (block.fabricsUsed.length > fabricLimit) {
     return `It uses ${block.fabricsUsed.length} fabrics but the customer asked for at most ${fabricLimit}.`;
+  }
+
+  if (tier) {
+    const counts = unitCounts(block);
+    if (!tier.geese && counts.geese) return `The ${tier.name} level does not use flying geese; draw those points as stitch-and-flip corners or leave them out.`;
+    if (!tier.kinds.includes('qst') && counts.qst) return `The ${tier.name} level does not use hourglass units.`;
+    if (!tier.kinds.includes('hst') && counts.hst) {
+      return `The ${tier.name} level does not use half-square triangles except as stitch-and-flip corners on a rectangle. Move each diagonal to the corner of a run of plain cells of the same fabric, or remove it.`;
+    }
+    const d = difficultyOf(block);
+    const order = ['beginner', 'confident', 'intermediate', 'advanced'];
+    if (order.indexOf(d.tier) > order.indexOf(tier.id)) {
+      return `It scores as ${d.level} (${block.pieces.length} pieces) but the customer asked for ${tier.name}. Simplify: merge small pieces, drop detail, use fewer triangles.`;
+    }
+    if (order.indexOf(d.tier) < order.indexOf(tier.id) - 1) {
+      return `It scores as ${d.level} (${block.pieces.length} pieces) but the customer asked for ${tier.name} and wants more of a challenge. Add detail: more pieces, sawtooth edges, a finer grid.`;
+    }
   }
 
   // A block that is 95% one fabric is a background with nothing on it.
@@ -302,7 +352,7 @@ function checkDraft(def, { blockSize, fabricLimit }) {
       (k) => block.pieces.filter((p) => p.fabric === k).length / block.pieces.length,
     ),
   );
-  if (block.pieces.length < 8 || biggest > 0.85) {
+  if (block.pieces.length < 5 || biggest > 0.85) {
     return 'The subject does not read - it is nearly all background. Draw the shape across more of the grid.';
   }
 

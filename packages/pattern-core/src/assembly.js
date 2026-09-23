@@ -14,8 +14,9 @@
  * than ambush a beginner in step 9.
  */
 
-import { fmt, luminance } from './units.js';
+import { fmt, fmtSize, luminance } from './units.js';
 import { decompose } from './partition.js';
+import { seamMath } from './seams.js';
 
 export const PRESS = {
   left: { id: 'left', arrow: '←', name: 'press left' },
@@ -25,6 +26,7 @@ export const PRESS = {
   open: { id: 'open', arrow: '↔', name: 'press open' },
 };
 
+const POS_NAME = { tl: 'top-left', tr: 'top-right', bl: 'bottom-left', br: 'bottom-right' };
 
 /**
  * Interior points where four or more pieces meet. Every one of them stacks four
@@ -158,54 +160,103 @@ function applyBulk(seams, bulk) {
   }
 }
 
+/** A list of corners as a quilter would say it: "the top-left and top-right corners". */
+function cornersPhrase(corners, F) {
+  const byFabric = new Map();
+  for (const k of corners) {
+    if (!byFabric.has(k.fabric)) byFabric.set(k.fabric, []);
+    byFabric.get(k.fabric).push(POS_NAME[k.pos]);
+  }
+  return [...byFabric.entries()]
+    .map(([fab, poss]) => `${F(fab)} on the ${poss.join(' and ')} corner${poss.length === 1 ? '' : 's'}`)
+    .join(', and ');
+}
+
 const UNIT_STEP = {
-  hst: (u, F) =>
-    `Pair a ${F(u.a)} square with a ${F(u.b)} square, right sides together. Draw the ` +
-    `diagonal, sew a seam either side of it, cut on the line. Two half-square triangles.`,
-  qst: (u, F) =>
-    `Make two half-square triangles from ${F(u.a)} and ${F(u.b)}, then cross them right ` +
-    `sides together with the seams nested, sew either side of the opposite diagonal and ` +
-    `cut apart. Two hourglass units.`,
-  geese: (u, F) =>
-    `No-waste flying geese: one large ${F(u.a)} square and four small ${F(u.b)} squares ` +
-    `make four geese. Sew, cut, press, repeat on the second pair of corners.`,
-  patch: () => null,
+  hst: (u, F, m) =>
+    `Pair a ${fmt(m.hstSquare(u.w))} ${F(u.a)} square with a ${F(u.b)} square the same size, right sides ` +
+    `together. Draw the diagonal, sew ¼" either side of it, cut on the line, press to the darker ` +
+    `fabric and trim to ${fmt(u.w + 2 * m.allowance)}. Two half-square triangles per pair.`,
+  qst: (u, F, m) =>
+    `Make two half-square triangles from ${fmt(m.qstSquare(u.w))} squares of ${F(u.a)} and ${F(u.b)}, ` +
+    `then cross them right sides together with the seams nested, sew ¼" either side of the opposite ` +
+    `diagonal and cut apart. Trim to ${fmt(u.w + 2 * m.allowance)}. Two hourglass units per pair.`,
+  geese: (u, F, m) => {
+    const long = Math.max(u.w, u.h);
+    const short = Math.min(u.w, u.h);
+    return (
+      `No-waste flying geese: one ${fmt(m.geeseLarge(long))} ${F(u.a)} square and four ` +
+      `${fmt(m.geeseSmall(short))} ${F(u.b)} squares make four ${fmtSize(long, short)} finished geese. ` +
+      `Sew two small squares to opposite corners of the large one, cut between the seams, press, ` +
+      `add a small square to each remaining corner, cut again. Trim to ${fmtSize(long + 2 * m.allowance, short + 2 * m.allowance)}.`
+    );
+  },
+  patch: (u, F, m) => {
+    if (!u.corners?.length) return null;
+    const cut = m.patch(u.w, u.h);
+    const sq = fmt(m.flipSquare(u.corners[0].size));
+    return (
+      `Stitch-and-flip: take the ${fmtSize(cut.w, cut.h)} ${F(u.a)} rectangle and lay a ${sq} square of ` +
+      `${cornersPhrase(u.corners, F)}, right sides together. Sew across each square corner to corner, ` +
+      `trim the two outer layers ¼" from the seam, flip the corner out and press.`
+    );
+  },
 };
+
+/** The same unit shape, ignoring position, so identical units group together. */
+function unitSignature(u) {
+  const corners = (u.corners ?? []).map((k) => `${k.pos}${k.fabric}`).sort().join('');
+  return `${u.kind}:${u.a}:${u.b}:${u.dir}:${u.w}x${u.h}:${corners}`;
+}
 
 /**
  * The full plan for one block: sew order, seams, pressing, and an honest
  * difficulty read.
  */
-export function planAssembly(block) {
+export function planAssembly(block, { seam, trim } = {}) {
   const region = { x0: 0, y0: 0, x1: block.size, y1: block.size };
   const tree = decompose(block.units, region);
   const seams = [];
   collectSeams(block, tree, seams);
   const bulk = bulkPoints(block);
   applyBulk(seams, bulk);
+  const m = seamMath(seam, trim);
 
   const F = (key) => block.fabrics[key]?.name ?? key;
 
   // Sub-assembly steps first: every triangle unit is built before anything is
   // joined, because that is the order you actually sit down and sew in.
   const steps = [];
-  const byKind = new Map();
+  const bySig = new Map();
   for (const u of block.units) {
-    if (u.kind === 'patch') continue;
-    const key = `${u.kind}:${u.a}:${u.b}:${u.dir}`;
-    if (!byKind.has(key)) byKind.set(key, []);
-    byKind.get(key).push(u);
+    if (u.kind === 'patch' && !u.corners?.length) continue;
+    const key = unitSignature(u);
+    if (!bySig.has(key)) bySig.set(key, []);
+    bySig.get(key).push(u);
   }
-  for (const [, group] of byKind) {
+  const unitGroups = [];
+  for (const [, group] of bySig) {
     const u = group[0];
-    const text = UNIT_STEP[u.kind](u, F);
+    const text = UNIT_STEP[u.kind](u, F, m);
+    const kind = u.kind === 'patch' ? 'flip' : u.kind;
+    unitGroups.push({
+      kind,
+      count: group.length,
+      sample: u,
+      a: u.a,
+      b: u.b,
+      finished: u.w === u.h ? `${fmt(u.w)} square` : fmtSize(u.w, u.h),
+      unfinished: u.w === u.h ? `${fmt(u.w + 2 * m.allowance)} square` : fmtSize(u.w + 2 * m.allowance, u.h + 2 * m.allowance),
+      name: labelForKind(kind, group.length),
+      labels: group.flatMap((g) => g.pieces.map((p) => p.label)).sort(),
+    });
     if (!text) continue;
     steps.push({
       phase: 'units',
       count: group.length,
-      kind: u.kind,
+      kind,
       labels: group.flatMap((g) => g.pieces.map((p) => p.label)).sort(),
-      text: `Make ${group.length} ${labelForKind(u.kind, group.length)}. ${text}`,
+      text: `Make ${group.length} ${labelForKind(kind, group.length)}. ${text}`,
     });
   }
 
@@ -232,6 +283,7 @@ export function planAssembly(block) {
     tree,
     seams,
     steps,
+    unitGroups,
     bulk,
     partialSeams: partials,
     needsPartialSeam: partials.length > 0,
@@ -244,11 +296,13 @@ export function planAssembly(block) {
   };
 }
 
-function labelForKind(kind, n) {
+export function labelForKind(kind, n) {
   const names = {
     hst: ['half-square triangle', 'half-square triangles'],
     qst: ['hourglass unit', 'hourglass units'],
     geese: ['flying goose', 'flying geese'],
+    flip: ['stitch-and-flip unit', 'stitch-and-flip units'],
+    patch: ['patch', 'patches'],
   };
   const pair = names[kind] ?? [kind, kind];
   return n === 1 ? pair[0] : pair[1];

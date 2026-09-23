@@ -2,8 +2,16 @@
  * The starter pattern library.
  *
  * Picture blocks are drawn on an 8x8 grid of 1.5" cells - fine enough to read
- * as a cow, coarse enough that the piece count stays sane. The two traditional
- * star blocks use coarser grids because that is how they are actually built.
+ * as a cow, coarse enough that the piece count stays sane. Traditional blocks
+ * use the coarser grids they are actually drafted on: a nine patch is a 3 grid,
+ * a churn dash a 6 grid, a maple leaf a 9 grid.
+ *
+ * The library was rebuilt against a stack of commercial patterns, and it now
+ * runs the whole range those patterns cover: charm squares and nine patches at
+ * the bottom, half-square-triangle stars and stitch-and-flip picture blocks in
+ * the middle, and a lady of the lake with 34 pieces at the top. Every block
+ * says which skill tier it lands in, and the tier is computed from the
+ * geometry rather than typed in, so it cannot lie.
  */
 
 export const FABRICS = {
@@ -21,11 +29,32 @@ export const FABRICS = {
   butter: { name: 'Butter yellow', hex: '#EBD27A' },
   water: { name: 'Lake blue', hex: '#5C86B5' },
   rose: { name: 'Dusty rose', hex: '#D9A3A0' },
+  // The sampler solids: the ten a modern sampler ships with.
+  leaf: { name: 'Leaf green', hex: '#5DAE3E' },
+  apple: { name: 'Green apple', hex: '#A8D98A' },
+  chartreuse: { name: 'Chartreuse', hex: '#CFE97A' },
+  buttercup: { name: 'Buttercup', hex: '#F2D24B' },
+  paper: { name: 'Snow', hex: '#FBFBF6' },
+  pink: { name: 'Pink', hex: '#F7B8C4' },
+  nectar: { name: 'Nectar', hex: '#F26B4E' },
+  pale: { name: 'Pale pink', hex: '#F9DDE4' },
+  amelia: { name: 'Amelia pink', hex: '#F6C6D9' },
+  popsicle: { name: 'Popsicle', hex: '#E64B9A' },
+  // The tea party: saturated solids and a low-volume text print.
+  magenta: { name: 'Magenta solid', hex: '#C6337E' },
+  teal: { name: 'Teal solid', hex: '#2FA39B' },
+  plum: { name: 'Plum print', hex: '#5B3A8C' },
+  lowvol: { name: 'Low-volume text print', hex: '#EFEAE0' },
+  stripe: { name: 'Candy stripe', hex: '#E58AB4' },
+  floral: { name: 'Big floral print', hex: '#D46A9C' },
+  aqua: { name: 'Aqua dot', hex: '#8FD3D1' },
+  mustard: { name: 'Mustard', hex: '#D9A63A' },
 };
 
 const F = FABRICS;
 
 export const LIBRARY = [
+  /* ---------------------------------------------------------- pictures --- */
   {
     id: 'cow',
     name: 'Cow, side profile',
@@ -65,6 +94,48 @@ export const LIBRARY = [
     ],
   },
   {
+    id: 'teacup',
+    name: 'Teacup',
+    subject: 'Kitchen',
+    blurb: 'A cup on a saucer with a proper handle. Twenty of them on rainbow backgrounds is the tea-party quilt.',
+    fabrics: { k: F.magenta, c: F.floral, h: F.stripe, s: F.aqua },
+    accent: 'c',
+    background: 'k',
+    rotate: ['#D46A9C', '#8FD3D1', '#F2D24B', '#5B3A8C', '#2FA39B', '#F26B4E'],
+    quilt: { cols: 4, rows: 5, setting: 'straight', rainbow: true, outerBorder: 6, piecedBorder: true, mirror: true },
+    rows: [
+      'k k k k k k k k',
+      'k h h h h h k k',
+      'k c c c c c h h',
+      'k c c c c c k h',
+      'k c c c c c h h',
+      'k c\\k c c c c/k k k',
+      'k s s s s s s k',
+      'k k k k k k k k',
+    ],
+  },
+  {
+    id: 'teapot',
+    name: 'Teapot',
+    subject: 'Kitchen',
+    blurb: 'An octagon body from four stitch-and-flip corners, a flying-goose spout, a lid, a foot and a handle.',
+    fabrics: { k: F.teal, p: F.floral, h: F.stripe },
+    accent: 'p',
+    background: 'k',
+    rotate: ['#D46A9C', '#5B3A8C', '#F2D24B', '#E64B9A', '#8FD3D1', '#F26B4E'],
+    quilt: { cols: 4, rows: 5, setting: 'straight', rainbow: true, outerBorder: 6, piecedBorder: true, mirror: true },
+    rows: [
+      'k k k k k k k k',
+      'k k k h h k k k',
+      'k k h h h h k k',
+      'p<k k/p p p p k\\p h h',
+      '.   p   p p p p   k h',
+      'k   p   p p p p   h h',
+      'k   p\\k p p p p/k k k',
+      'k k h h h h k k',
+    ],
+  },
+  {
     id: 'cat',
     name: 'Sitting cat',
     subject: 'Pets',
@@ -81,6 +152,31 @@ export const LIBRARY = [
       'e t t t t t t e',
       'e t t t t t t e\\t',
       'e t t t t t t t',
+    ],
+  },
+  {
+    id: 'chicken',
+    name: 'Chicken on a roost',
+    subject: 'Farm',
+    blurb: 'Comb, beak, a pointed wing and a roost strip. Drawn on a 12 grid, so the comb is real one-inch piecing.',
+    fabrics: { k: F.paper, c: F.buttercup, w: F.pale, b: F.nectar, r: F.apple },
+    accent: 'c',
+    background: 'k',
+    rotate: ['#F2D24B', '#F26B4E', '#A8D98A', '#B79B7A', '#F7B8C4', '#CFE97A'],
+    quilt: { cols: 4, rows: 4, setting: 'alternate', innerBorder: 1.5, outerBorder: 4 },
+    rows: [
+      'k k k/b k/b k k k k k k k k',
+      'k k b b k k k k k k k k',
+      'k k k/c c c k\\c k k k k k k',
+      'b<k c c c c c k k k k k k',
+      '.   c c c c c k\\c k k k k k',
+      'k k/c c c c c c c c c k\\c k',
+      'k c c w w w w w c\\w c c k',
+      'k c c w w w w w w/c c c k',
+      'k c c c c c c c c c c k',
+      'k c\\k c c c c c c c c c/k k',
+      'r r r r r r r r r r r r',
+      'r r r r r r r r r r r r',
     ],
   },
   {
@@ -160,6 +256,28 @@ export const LIBRARY = [
     ],
   },
   {
+    id: 'maple-leaf',
+    name: 'Maple leaf',
+    subject: 'Outdoors',
+    blurb: 'Three lobes stepped out of half-square triangles and a diagonal stem made with two stitch-and-flip corners, exactly as the big-leaf quilt does it.',
+    fabrics: { k: F.oat, l: F.nectar, s: F.bark },
+    accent: 'l',
+    blockSize: 18,
+    rotate: ['#F26B4E', '#D9A63A', '#B8453A', '#A8D98A', '#6E4A32'],
+    quilt: { cols: 3, rows: 3, setting: 'sashed', sashing: 2, outerBorder: 4 },
+    rows: [
+      'k   k   k   k\\l k   k   k\\l k   k',
+      'k   k   k   l   k\\l k   l   k\\l k',
+      'k   k   k   l   l   k\\l l   l   k\\l',
+      'l\\k l   l   l   l   l   l   l   l',
+      'k   l\\k l   l   l   l   l   l   l',
+      'k   k   l\\k l   l   l   l   l   l',
+      'l\\k l   l   l   l   l   s   s   k\\s',
+      'k   l\\k l   l   l   l   s   s   s',
+      'k   k   l\\k l   l   l   s\\k s   s',
+    ],
+  },
+  {
     id: 'cowskis',
     name: 'Cow with skis',
     subject: 'Custom',
@@ -180,11 +298,148 @@ export const LIBRARY = [
     ],
   },
 
-  // --- traditional blocks, on the grids they are actually drafted on --------
+  /* ------------------------------------------- squares and strips (easy) --- */
+  {
+    id: 'nine-patch',
+    name: 'Nine patch',
+    subject: 'Traditional',
+    blurb: 'Nine squares. The first block anyone sews, and still the backbone of half the quilts ever made.',
+    grid: 3,
+    fabrics: { a: F.chartreuse, b: F.nectar, c: F.pale },
+    accent: 'b',
+    rotate: ['#F26B4E', '#E64B9A', '#5DAE3E', '#F2D24B', '#2F4A7A'],
+    quilt: { cols: 5, rows: 6, setting: 'alternate', outerBorder: 3 },
+    rows: ['a b a', 'b c b', 'a b a'],
+  },
+  {
+    id: 'rail-fence',
+    name: 'Rail fence',
+    subject: 'Traditional',
+    blurb: 'Four strips make a square; four squares turned in turn make the block. Strip piecing at its simplest.',
+    subgrid: 2,
+    fabrics: { a: F.paper, b: F.apple, c: F.leaf, d: F.pine },
+    accent: 'c',
+    rotate: ['#5DAE3E', '#2F4A7A', '#B8453A', '#D9A63A'],
+    rows: [
+      'a a a a a b c d',
+      'b b b b a b c d',
+      'c c c c a b c d',
+      'd d d d a b c d',
+      'a b c d a a a a',
+      'a b c d b b b b',
+      'a b c d c c c c',
+      'a b c d d d d d',
+    ],
+  },
+  {
+    id: 'courthouse-steps',
+    name: 'Courthouse steps',
+    subject: 'Traditional',
+    blurb: 'Logs added top and bottom, then side and side, working outward from the centre.',
+    fabrics: { a: F.popsicle, b: F.pale, c: F.chartreuse, d: F.pink, e: F.leaf },
+    accent: 'a',
+    rotate: ['#E64B9A', '#F26B4E', '#F2D24B', '#2FA39B'],
+    rows: [
+      'e d d d d e',
+      'e c b b c e',
+      'e c a a c e',
+      'e c a a c e',
+      'e c b b c e',
+      'e d d d d e',
+    ],
+  },
+  {
+    id: 'log-cabin',
+    name: 'Log cabin',
+    subject: 'Traditional',
+    blurb: 'Logs spiral out from a centre square, light on two sides and dark on the other two. Set four together and the lights make a diamond.',
+    fabrics: { a: F.nectar, p: F.leaf, q: F.apple, r: F.pine, l: F.paper, m: F.pale, n: F.oat },
+    accent: 'a',
+    rotate: ['#F26B4E', '#E64B9A', '#F2D24B'],
+    quilt: { cols: 4, rows: 5, setting: 'straight', outerBorder: 4 },
+    rows: [
+      'l l l l l q',
+      'n m m m r q',
+      'n l a p r q',
+      'n l q q r q',
+      'n p p p p q',
+      'r r r r r r',
+    ],
+  },
+  {
+    id: 'snowball',
+    name: 'Snowball',
+    subject: 'Traditional',
+    blurb: 'A square with its four corners nipped off by stitch-and-flip. Five pieces, and it chains beautifully with a nine patch.',
+    fabrics: { k: F.chartreuse, c: F.paper },
+    accent: 'c',
+    rotate: ['#FBFBF6', '#F7B8C4', '#F2D24B', '#A8D98A'],
+    quilt: { cols: 5, rows: 6, setting: 'alternate', outerBorder: 3 },
+    rows: [
+      'k/c c c k\\c',
+      'c   c c c',
+      'c   c c c',
+      'c\\k c c c/k',
+    ],
+  },
+  {
+    id: 'square-in-square',
+    name: 'Square in a square',
+    subject: 'Traditional',
+    blurb: 'One square set on point inside another. Four stitch-and-flip corners, or four half-square triangles if you would rather.',
+    blockSize: 6,
+    fabrics: { k: F.buttercup, c: F.paper },
+    accent: 'k',
+    rotate: ['#F2D24B', '#5DAE3E', '#E64B9A', '#2FA39B'],
+    quilt: { cols: 7, rows: 9, setting: 'alternate', outerBorder: 4 },
+    rows: ['k/c k\\c', 'c\\k c/k'],
+  },
+
+  /* --------------------------------------------------- triangles (middle) --- */
+  {
+    id: 'shoo-fly',
+    name: 'Shoo fly',
+    subject: 'Traditional',
+    blurb: 'A nine patch with half-square triangles in the corners. The step up from squares.',
+    fabrics: { k: F.paper, d: F.leaf, c: F.chartreuse },
+    accent: 'd',
+    rotate: ['#5DAE3E', '#2F4A7A', '#B8453A', '#E64B9A'],
+    rows: ['k/d d k\\d', 'd c d', 'd\\k d d/k'],
+  },
+  {
+    id: 'friendship-star',
+    name: 'Friendship star',
+    subject: 'Stars',
+    blurb: 'Four half-square triangles spin around a centre square. The simplest star there is.',
+    fabrics: { k: F.paper, s: F.popsicle },
+    accent: 's',
+    rotate: ['#E64B9A', '#2FA39B', '#F26B4E', '#5DAE3E', '#2F4A7A'],
+    rows: ['k k\\s k', 'k/s s s/k', 'k s\\k k'],
+  },
+  {
+    id: 'pinwheel',
+    name: 'Pinwheel',
+    subject: 'Traditional',
+    blurb: 'Four half-square triangles, all turning the same way.',
+    fabrics: { k: F.paper, d: F.teal },
+    accent: 'd',
+    rotate: ['#2FA39B', '#E64B9A', '#F2D24B', '#5DAE3E'],
+    rows: ['d\\k k/d', 'd/k k\\d'],
+  },
+  {
+    id: 'hourglass-four',
+    name: 'Hourglass four',
+    subject: 'Traditional',
+    blurb: 'Four hourglass units in a checkerboard. Quarter-square triangles, so mind the bias.',
+    fabrics: { a: F.pink, b: F.paper },
+    accent: 'a',
+    rotate: ['#F7B8C4', '#2FA39B', '#F2D24B', '#5DAE3E'],
+    rows: ['a+b b+a', 'b+a a+b'],
+  },
   {
     id: 'sawtooth-star',
     name: 'Sawtooth star',
-    subject: 'Traditional',
+    subject: 'Stars',
     blurb: 'Eight flying geese around a plain centre. The block every sampler starts with.',
     grid: 4,
     fabrics: { k: F.oat, s: F.indigo, c: F.madder },
@@ -200,7 +455,7 @@ export const LIBRARY = [
   {
     id: 'ohio-star',
     name: 'Ohio star',
-    subject: 'Traditional',
+    subject: 'Stars',
     blurb: 'Four hourglass units and five squares. Nine pieces of geometry, no curves anywhere.',
     grid: 3,
     fabrics: { k: F.oat, c: F.madder },
@@ -212,13 +467,173 @@ export const LIBRARY = [
       'k   c+k k',
     ],
   },
+  {
+    id: 'churn-dash',
+    name: 'Churn dash',
+    subject: 'Traditional',
+    blurb: 'Big half-square triangles in the corners, split rectangles on the sides. The triangles here are two cells wide.',
+    fabrics: { k: F.paper, d: F.leaf, c: F.chartreuse },
+    accent: 'd',
+    rotate: ['#5DAE3E', '#E64B9A', '#2F4A7A', '#F26B4E'],
+    rows: [
+      'k/d .   k k k\\d .',
+      '.   .   d d .   .',
+      'k   d   c c d   k',
+      'k   d   c c d   k',
+      'd\\k .   d d d/k .',
+      '.   .   k k .   .',
+    ],
+  },
+
+  /* ---------------------------------------------- lots of triangles (hard) --- */
+  {
+    id: 'dutchmans-puzzle',
+    name: 'Dutchman’s puzzle',
+    subject: 'Stars',
+    blurb: 'Eight flying geese in four pairs, each pair turned a quarter. Reads as a pinwheel from across the room.',
+    fabrics: { k: F.paper, s: F.nectar },
+    accent: 's',
+    rotate: ['#F26B4E', '#2FA39B', '#E64B9A', '#5DAE3E'],
+    rows: [
+      's^k .   s>k s>k',
+      's^k .   .   .',
+      's<k s<k svk .',
+      '.   .   svk .',
+    ],
+  },
+  {
+    id: 'bear-paw',
+    name: 'Bear paw',
+    subject: 'Traditional',
+    blurb: 'A big square pad with two triangle claws on every side and a small square in each corner. Eight half-square triangles.',
+    fabrics: { k: F.paper, c: F.chartreuse, p: F.nectar },
+    accent: 'p',
+    rotate: ['#F26B4E', '#5B3A8C', '#2FA39B', '#B8453A'],
+    rows: [
+      'k   k\\c k\\c c',
+      'k/c p   p   c/k',
+      'k/c p   p   c/k',
+      'c   c\\k c\\k k',
+    ],
+  },
+  {
+    id: 'ocean-waves',
+    name: 'Ocean waves',
+    subject: 'Traditional',
+    blurb: 'Sixteen half-square triangles and nothing else, turned so the dark ones make diamonds. Thirty-two bias edges to keep straight.',
+    fabrics: { k: F.paper, m: F.teal },
+    accent: 'm',
+    rotate: ['#2FA39B', '#2F4A7A', '#5B3A8C', '#B8453A'],
+    rows: [
+      'k/m m\\k k/m m\\k',
+      'k\\m m/k k\\m m/k',
+      'k/m m\\k k/m m\\k',
+      'k\\m m/k k\\m m/k',
+    ],
+  },
+  {
+    id: 'lady-of-the-lake',
+    name: 'Lady of the lake',
+    subject: 'Traditional',
+    blurb: 'One big half-square triangle ringed by sixteen small ones, all pointing the same way. Thirty-four pieces and every one of them has a bias edge.',
+    blockSize: 10,
+    fabrics: { p: F.indigo, k: F.paper },
+    accent: 'p',
+    rotate: ['#2F4A7A', '#B8453A', '#3F5F4A', '#5B3A8C'],
+    rows: [
+      'p/k p/k p/k p/k p/k',
+      'p/k p/k .   .   p/k',
+      'p/k .   .   .   p/k',
+      'p/k .   .   .   p/k',
+      'p/k p/k p/k p/k p/k',
+    ],
+  },
+  {
+    id: 'delectable-mountains',
+    name: 'Delectable mountains',
+    subject: 'Traditional',
+    blurb: 'A big mountain of a triangle in each quarter, with a sawtooth of small triangles climbing its slope. Made as four units, then turned.',
+    blockSize: 16,
+    subgrid: 2,
+    fabrics: { k: F.paper, m: F.teal, s: F.mustard },
+    accent: 'm',
+    rotate: ['#2FA39B', '#5B3A8C', '#F26B4E', '#2F4A7A'],
+    rows: [
+      'k   k   k   k/s s\\k k   k   k',
+      'k   k   k/s m   m   s\\k k   k',
+      'k   k/s m   m   m   m   s\\k k',
+      'k/s m   m   m   m   m   m   s\\k',
+      's\\k m   m   m   m   m   m   k/s',
+      'k   s\\k m   m   m   m   k/s k',
+      'k   k   s\\k m   m   k/s k   k',
+      'k   k   k   s\\k k/s k   k   k',
+    ],
+  },
 ];
 
-export const SUBJECTS = [...new Set(LIBRARY.map((b) => b.subject))];
+/**
+ * Hexagon patterns are a different animal - hand-sewn over papers, not cut
+ * on a grid - so they live in their own list with their own fields.
+ */
+export const HEXAGON_LIBRARY = [
+  {
+    kind: 'hexagon',
+    id: 'hexie-runner',
+    name: 'Scrappy hexagon runner',
+    subject: 'Hand piecing',
+    blurb: 'A field of one-inch hexies, every one a different print, no two alike touching. The table runner in the photo.',
+    side: 1,
+    width: 16,
+    height: 40,
+    layout: 'scrappy',
+    fabrics: [
+      { name: 'Pink daisy', hex: '#F7B8C4' }, { name: 'Aqua floral', hex: '#8FD3D1' }, { name: 'Orange stripe', hex: '#F2A24E' },
+      { name: 'Olive gingham', hex: '#9DBB5A' }, { name: 'Magenta bloom', hex: '#D9548C' }, { name: 'Yellow check', hex: '#F2D24B' },
+      { name: 'Cream ditsy', hex: '#F7F1E0' }, { name: 'Teal leaf', hex: '#4FA8A3' }, { name: 'Peach petal', hex: '#F6C6A8' },
+    ],
+  },
+  {
+    kind: 'hexagon',
+    id: 'flower-garden',
+    name: 'Grandmother’s flower garden',
+    subject: 'Hand piecing',
+    blurb: 'Rosettes of six petals around a yellow centre, set in a path of aqua. The classic.',
+    side: 1,
+    width: 40,
+    height: 52,
+    layout: 'garden',
+    fabrics: [
+      { name: 'Pink daisy', hex: '#F7B8C4' }, { name: 'Magenta bloom', hex: '#D9548C' }, { name: 'Orange stripe', hex: '#F2A24E' },
+      { name: 'Olive gingham', hex: '#9DBB5A' }, { name: 'Teal leaf', hex: '#4FA8A3' },
+    ],
+    path: { name: 'Aqua dot path', hex: '#BFE3E0' },
+    centre: { name: 'Butter centres', hex: '#F2D24B' },
+  },
+  {
+    kind: 'hexagon',
+    id: 'double-garden',
+    name: 'Double rosettes',
+    subject: 'Hand piecing',
+    blurb: 'Two rings around every centre, nineteen hexies a flower. Bigger blooms, more sewing.',
+    side: 1,
+    width: 40,
+    height: 52,
+    layout: 'double-garden',
+    fabrics: [
+      { name: 'Pink daisy', hex: '#F7B8C4' }, { name: 'Magenta bloom', hex: '#D9548C' }, { name: 'Orange stripe', hex: '#F2A24E' },
+      { name: 'Olive gingham', hex: '#9DBB5A' }, { name: 'Teal leaf', hex: '#4FA8A3' }, { name: 'Peach petal', hex: '#F6C6A8' },
+    ],
+    path: { name: 'Cream path', hex: '#F7F1E0' },
+    centre: { name: 'Butter centres', hex: '#F2D24B' },
+  },
+];
+
+export const SUBJECTS = [...new Set([...LIBRARY, ...HEXAGON_LIBRARY].map((b) => b.subject))];
 
 export const PRICING = {
   block10: 10,
   block12: 15,
   full: 22,
   custom: 35,
+  hexagon: 12,
 };

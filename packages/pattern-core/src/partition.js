@@ -111,12 +111,15 @@ function splitAt(units, axis, line, crossed) {
       out.push(u);
       continue;
     }
+    // Stitch-and-flip corners stay with whichever half still owns that corner.
+    const corners = u.corners ?? [];
+    const keep = (positions) => corners.filter((k) => positions.includes(k.pos));
     if (axis === 'y') {
-      out.push({ ...u, h: line - u.y, split: true });
-      out.push({ ...u, y: line, h: u.y + u.h - line, split: true });
+      out.push({ ...u, h: line - u.y, split: true, corners: keep(['tl', 'tr']) });
+      out.push({ ...u, y: line, h: u.y + u.h - line, split: true, corners: keep(['bl', 'br']) });
     } else {
-      out.push({ ...u, w: line - u.x, split: true });
-      out.push({ ...u, x: line, w: u.x + u.w - line, split: true });
+      out.push({ ...u, w: line - u.x, split: true, corners: keep(['tl', 'bl']) });
+      out.push({ ...u, x: line, w: u.x + u.w - line, split: true, corners: keep(['tr', 'br']) });
     }
   }
   return out;
