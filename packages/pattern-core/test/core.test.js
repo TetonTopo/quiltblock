@@ -22,6 +22,7 @@ import {
   planQuilt, layoutFor, QUILT_SIZES,
   planHexagons, hexagonsSvg, hexTemplateSvg,
 } from '../src/index.js';
+import { checkDraft, toDefinition } from '../../../netlify/lib/draft.js';
 
 const results = [];
 let current = null;
@@ -658,6 +659,70 @@ test('a quilt of many blocks scales cleanly to a different block size', () => {
   eq(ten.block.pieces.length, twelve.block.pieces.length, 'same piecing at either size');
   ok(ten.block.size < twelve.block.size, 'but a smaller block');
   eq(ten.validation.errors, [], 'and it still passes the rules');
+});
+
+// ------------------------------------------------------------ generator ----
+// checkDraft is the gate between the model and a customer. It never calls the
+// model, so it is tested here with library blocks and small hand-drawn drafts.
+
+const draftCheck = (def, tier, { blockSize = def.blockSize ?? 12, fabricLimit = 10 } = {}) =>
+  checkDraft(def, { blockSize, fabricLimit, tier: tier && TIERS[tier] });
+
+test('checkDraft passes a block that fits the level asked for', () => {
+  eq(draftCheck(byId('nine-patch'), 'beginner'), null, 'nine patch at beginner');
+  eq(draftCheck(byId('sawtooth-star'), 'confident'), null, 'sawtooth star at confident');
+  eq(draftCheck(byId('dutchmans-puzzle'), 'intermediate'), null, "Dutchman's puzzle at intermediate");
+  eq(draftCheck(byId('ocean-waves'), 'advanced'), null, 'ocean waves at advanced');
+  eq(draftCheck(byId('nine-patch'), 'confident'), null, 'one level easier than asked is still fine');
+});
+
+test('checkDraft hands back a build error in words', () => {
+  const broken = { id: 'x', fabrics: AB, rows: ['a b', 'a'] };
+  const msg = draftCheck(broken, 'confident');
+  ok(typeof msg === 'string' && msg.length > 10, `a sentence comes back (${msg})`);
+});
+
+test('checkDraft applies the tier limits to pieces and sizes', () => {
+  ok(draftCheck(byId('rail-fence'), 'beginner').includes('14-piece ceiling'), 'too many pieces for a beginner');
+  ok(draftCheck(byId('chicken'), 'confident').includes('24-piece ceiling'), 'too many for confident');
+  ok(draftCheck(byId('cow'), 'beginner').includes('under the 2'), '1½" cells are too small for a beginner');
+});
+
+test('checkDraft gates constructions by tier', () => {
+  const goose = { id: 'goose', fabrics: AB, rows: ['a^b . b', 'b b b', 'a a a'] };
+  ok(draftCheck(goose, 'beginner').includes('flying geese'), 'no geese for a beginner');
+  ok(!String(draftCheck(goose, 'confident')).includes('flying geese'), 'geese are fine at confident');
+  ok(draftCheck(byId('ohio-star'), 'confident').includes('hourglass'), 'no hourglasses at confident');
+  ok(draftCheck(byId('pinwheel'), 'beginner').includes('half-square triangles'), 'no free-standing HSTs at beginner');
+});
+
+test('checkDraft rejects a block that is too hard or too easy', () => {
+  ok(draftCheck(byId('dutchmans-puzzle'), 'confident').includes('scores as Intermediate'), 'too hard');
+  ok(draftCheck(byId('nine-patch'), 'intermediate').includes('more of a challenge'), 'two levels too easy');
+  ok(draftCheck(byId('nine-patch'), 'advanced').includes('more of a challenge'), 'three levels too easy');
+});
+
+test('checkDraft enforces the fabric limit and refuses an empty picture', () => {
+  ok(draftCheck(byId('teapot'), 'confident', { fabricLimit: 2 }).includes('at most 2'), 'fabric limit');
+  const empty = { id: 'empty', fabrics: AB, rows: ['a a a a', 'a a a a', 'a a a a', 'a a a b'] };
+  ok(draftCheck(empty, null).includes('nearly all background'), 'a lone square on a field does not read');
+});
+
+test('toDefinition cleans up whatever the model sends', () => {
+  const def = toDefinition({
+    name: 'Fox', accent: 'orange', rows: ['a b', 'b a'],
+    fabrics: [
+      { key: 'a', name: 'Rust', hex: '#c0562f' },
+      { key: 'b', name: 'Cream', hex: 'cream' },
+      { key: 'cc', name: 'Two letters', hex: '#000000' },
+      null,
+    ],
+  });
+  eq(Object.keys(def.fabrics), ['a', 'b'], 'keys longer than one letter are dropped');
+  eq(def.fabrics.b.hex, '#888888', 'a hex that is not a hex becomes neutral grey');
+  eq(def.accent, 'o', 'accent is cut to one letter');
+  ok(def.custom && def.id.startsWith('custom-'), 'marked custom with a fresh id');
+  eq(toDefinition({}).rows, [], 'an empty draft gives an empty grid, not a crash');
 });
 
 // ------------------------------------------------------------------ run ----
