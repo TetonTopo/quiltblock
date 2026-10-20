@@ -78,7 +78,8 @@ export const TIERS = {
     minCell: 12,
     prompt:
       'Every cell type is available. This customer wants a challenge: aim for 30 to 70 pieces, fine detail, ' +
-      'sawtooth edges of small half-square triangles where they help the picture. Pieces may go down to ¾ inch.',
+      'sawtooth edges of small half-square triangles where they help the picture. Pieces may go down to ¾ inch, ' +
+      'and a few strips may go to ½ inch where the picture really needs them (the pattern will say it bends the ¾ inch rule).',
   },
 };
 
@@ -101,5 +102,12 @@ export function tierOfScore(score) {
 /** Validation limits for a generated block at this tier. */
 export function tierLimits(tier) {
   const t = resolveTier(tier);
-  return { maxPieces: t.pieces[1], comfortablePieces: t.pieces[1], minPieces: t.pieces[0], minFinished: t.minCell };
+  return {
+    maxPieces: t.pieces[1],
+    comfortablePieces: t.pieces[1],
+    minPieces: t.pieces[0],
+    minFinished: t.minCell,
+    // Only an Advanced design may bend the 3/4" rule down to 1/2".
+    allowBend: t.id === 'advanced',
+  };
 }

@@ -28,7 +28,9 @@ is where they live in code. Nothing reaches a customer without passing them.
 - **Flat and crayon-simple.** A silhouette, not a rendering.
 - **Difficulty is piece count, not colour count** — and triangles count for more
   than squares, because bias edges stretch and straight grain does not.
-- **Nothing too small to sew.**
+- **Nothing too small to sew.** ¾" finished is the floor. Advanced patterns may
+  bend it down to ½" (commercial patterns do), and then the pattern says so and
+  is rated Advanced whatever else it is. Nothing goes under ½".
 - **Complexity is a dial.** Beginner, confident beginner, intermediate and
   advanced are computed from the geometry — pieces, bias edges, tiny bits — never
   typed in. The generator takes the level as an instruction and rejects drafts

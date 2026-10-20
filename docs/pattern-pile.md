@@ -56,10 +56,10 @@ About forty quilts. Several scans are incomplete (only some pages present), note
 | Me and my Dog (Tilda; partial) | - | C/D | - |
 | Groovy Hexie runner (Moda) | - | hexies fit `hexagons.js`; finish is appliqué | - |
 | Bake Off (Jillily Studio) | - | star A; quilt a panel medallion (B) | split-point star |
-| Enchanted Seas Pirate Quilt (P&B) | confident | boats now buildable as 7 × 9, but use ½" strips (see below); pieced sashing B | - |
+| Enchanted Seas Pirate Quilt (P&B) | confident | boat A (7 × 9, ½" strips - bends the ¾" rule, so rated Advanced); pieced sashing B | little boat - **set as the original's five borders and cornerstones** |
 | Wild and Free (Riley Blake) | beginner | A - **set as the original: panel centre, 8" border, stars in the corners** | two-sky star |
 
-35 blocks in all, in `packages/pattern-core/src/pile.js`. None of them has been checked by Mom.
+36 blocks in all, in `packages/pattern-core/src/pile.js`, including the pirate quilt's little boat. None of them has been checked by Mom.
 
 ## What was added to the engine because of the pile
 
@@ -83,6 +83,6 @@ About forty quilts. Several scans are incomplete (only some pages present), note
 
 ## Questions for Mom
 
-- **½" strips.** The house rule says nothing under ¾" finished. The pirate boats, Norm & Nanette and the Hat and Boots welts all use ½" finished strips (cut 1"). Should advanced patterns be allowed down to ½"?
+- **½" strips** - decided Oct 20: allowed down to ½" finished, flagged on the pattern as bending the ¾" rule, and always rated Advanced. Does that match how she would label them?
 - **Pieces per block.** She likes big blocks; the medallion stars are 80-88 pieces. Is there a point where she would rather see it split into units on separate pages?
 - Do the 35 drafted blocks look right next to the originals?

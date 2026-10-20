@@ -11,7 +11,7 @@
 
 import { fmt } from './units.js';
 import { seamMath } from './seams.js';
-import { tierOfScore } from './tiers.js';
+import { tierOfScore, TIERS } from './tiers.js';
 
 export const LIMITS = {
   maxFabrics: 8,
@@ -25,6 +25,15 @@ export const LIMITS = {
   minPieces: 8,
   /** Anything under 3/4" finished is miserable to sew and worse to press. */
   minFinished: 12,
+  /**
+   * ...but commercial patterns do it anyway: half-inch finished strips (cut
+   * 1") are all over the pile. A block may bend the 3/4" rule down to 1/2",
+   * says so on the pattern, and is rated Advanced whatever else it is.
+   * Nothing goes under 1/2".
+   */
+  bendFloor: 8,
+  /** Whether this check allows the bend at all. The generator turns it off below Advanced. */
+  allowBend: true,
 };
 
 const isStraight = (a, b) => {
@@ -97,15 +106,32 @@ export function validateBlock(block, { seam, trim, limits = {} } = {}) {
   }
 
   // --- nothing too small to sew -------------------------------------------
+  // Under the house 3/4" a unit is either an error or, from 1/2" up, a
+  // flagged bend of the rule (see LIMITS.bendFloor).
+  const bent = [];
   for (const u of block.units) {
-    const small = Math.min(u.w, u.h, ...(u.corners ?? []).map((k) => k.size));
-    if (small < L.minFinished) {
+    const small = smallestOf(u);
+    const bendable = L.allowBend && small < LIMITS.minFinished && small >= L.bendFloor;
+    if (small < L.minFinished && !bendable) {
       errors.push({
         rule: 'min-size',
-        message: `A unit finishes at ${fmt(small)}, under the ${fmt(L.minFinished)} minimum. Merge it into a neighbour.`,
+        message:
+          small < L.bendFloor
+            ? `A unit finishes at ${fmt(small)}, under the ${fmt(L.bendFloor)} that even an advanced pattern may go to. Merge it into a neighbour.`
+            : `A unit finishes at ${fmt(small)}, under the ${fmt(L.minFinished)} minimum. Merge it into a neighbour.`,
       });
       break;
     }
+    if (bendable) bent.push(small);
+  }
+  if (bent.length && !errors.some((e) => e.rule === 'min-size')) {
+    warnings.push({
+      rule: 'bends-rule',
+      message:
+        `Bends the ${fmt(LIMITS.minFinished)} rule: ${bent.length} unit${bent.length === 1 ? '' : 's'} finish${bent.length === 1 ? 'es' : ''} ` +
+        `under ${fmt(LIMITS.minFinished)} (the smallest ${fmt(Math.min(...bent))}). Allowed as an Advanced pattern - ` +
+        `cut carefully, sew a true scant seam, and press those seams open.`,
+    });
   }
 
   // --- every piece labelled, every cut size printable ----------------------
@@ -132,6 +158,7 @@ export function validateBlock(block, { seam, trim, limits = {} } = {}) {
       units: block.units.length,
       fabrics: fabricCount,
       difficulty: difficultyOf(block),
+      bendsRule: bent.length > 0,
     },
   };
 }
@@ -158,9 +185,17 @@ export function difficultyOf(block) {
   const triangles = block.units.filter((u) => u.kind !== 'patch').length;
   const corners = block.units.reduce((s, u) => s + (u.corners?.length ?? 0), 0);
   const tiny = block.units.filter((u) => Math.min(u.w, u.h) < 24).length; // under 1½"
-  const score = block.pieces.length + triangles * 1.5 + corners * 0.5 + tiny * 0.5;
+  let score = block.pieces.length + triangles * 1.5 + corners * 0.5 + tiny * 0.5;
+  // A block that bends the 3/4" rule is Advanced, however few pieces it has.
+  const bendsRule = block.units.some((u) => smallestOf(u) < LIMITS.minFinished);
+  if (bendsRule) score = Math.max(score, TIERS.intermediate.maxScore + 1);
   const tier = tierOfScore(score);
-  return { level: tier.name, tier: tier.id, score };
+  return { level: tier.name, tier: tier.id, score, bendsRule };
+}
+
+/** The narrowest finished dimension in a unit, its corners included. */
+function smallestOf(u) {
+  return Math.min(u.w, u.h, ...(u.corners ?? []).map((k) => k.size));
 }
 
 export { polygonArea };

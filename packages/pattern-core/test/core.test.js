@@ -224,7 +224,7 @@ test('a block mirrors left to right', () => {
 });
 
 test('valid block sizes follow from the grid', () => {
-  eq(validSizes(8), [6, 8, 9, 10, 12, 14, 15, 16, 18, 20, 24], 'an 8 grid takes every size in the list');
+  eq(validSizes(8), [6, 7, 8, 9, 10, 12, 14, 15, 16, 18, 20, 24], 'an 8 grid takes every size in the list');
   eq(validSizes(9), [9, 18], 'a 9 grid needs a multiple of nine sixteenths per cell');
   eq(validSizes(5), [10, 15, 20], 'a 5 grid');
 });
@@ -818,6 +818,32 @@ test('a panel quilt frames a printed panel and sets the block in the corners', (
   ok(planQuilt(star, { setting: 'panel', borders: [3], cornerBlocks: false }).cornerBlock === null, 'corner blocks can be turned off');
   const ohio = buildBlock(byId('ohio-star'), { blockSize: 12 });
   ok(planQuilt(ohio, { setting: 'panel', borders: [5] }).cornerBlock === null, 'and are skipped when a 3-grid block will not make 5"');
+});
+
+// ------------------------------------------------------ the 3/4" rule ----
+
+test('half-inch strips bend the rule: allowed, flagged, and always Advanced', () => {
+  const p = makePattern(byId('little-boat'), { blockSize: 7 });
+  eq(p.validation.errors, [], 'the boat passes');
+  ok(p.validation.warnings.some((w) => w.rule === 'bends-rule' && w.message.includes('½"')), 'with a note that it bends the rule');
+  eq([p.difficulty.tier, p.difficulty.bendsRule], ['advanced', true], 'and it is Advanced');
+  ok(p.validation.stats.bendsRule, 'the stats say so too');
+  // A block with nothing under 3/4" is untouched.
+  const star = makePattern(byId('sawtooth-star'));
+  eq([star.difficulty.bendsRule, star.validation.warnings.some((w) => w.rule === 'bends-rule')], [false, false], 'ordinary blocks are not flagged');
+});
+
+test('nothing goes under half an inch, bend or no bend', () => {
+  // 12 columns on a 3" block: quarter-inch cells.
+  const tiny = { id: 'tiny', fabrics: AB, rows: Array.from({ length: 12 }, (_, r) => Array.from({ length: 12 }, (_, c) => ((r + c) % 2 ? 'a' : 'b')).join(' ')) };
+  const p = makePattern(tiny, { blockSize: 3 });
+  ok(p.validation.errors.some((e) => e.rule === 'min-size' && e.message.includes('½"')), 'a quarter-inch piece is refused');
+});
+
+test('the generator only bends the rule when asked for Advanced', () => {
+  const boat = byId('little-boat');
+  eq(draftCheck(boat, 'advanced', { blockSize: 7 }), null, 'an advanced draft may use half-inch strips');
+  ok(String(draftCheck(boat, 'intermediate', { blockSize: 7 })).includes('minimum'), 'an intermediate one may not');
 });
 
 // ---------------------------------------------------------------- tiles ----

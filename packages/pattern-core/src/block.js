@@ -70,7 +70,7 @@ export const CORNER_METHODS = {
 export const DEFAULT_CORNERS = 'flip';
 
 /** Finished block sizes a grid can be drawn at without a fractional cell. */
-export const SIZE_CHOICES = [6, 8, 9, 10, 12, 14, 15, 16, 18, 20, 24];
+export const SIZE_CHOICES = [6, 7, 8, 9, 10, 12, 14, 15, 16, 18, 20, 24];
 export function validSizes(gridSize, choices = SIZE_CHOICES) {
   return choices.filter((s) => inches(s) % gridSize === 0);
 }

@@ -138,7 +138,7 @@ buildBlock(def, { blockSize: 12 })
 ```
 
 A block's size in sixteenths must divide evenly by the grid size. `validSizes(grid)`
-lists the sizes that work: an 8 grid takes 6, 8, 9, 10, 12, 14, 15, 16, 18, 20
+lists the sizes that work: an 8 grid takes 6, 7, 8, 9, 10, 12, 14, 15, 16, 18, 20
 and 24; a 9 grid takes 9 and 18; a 5 grid 10, 15 and 20. Picture blocks are
 drawn on 8×8 (the chicken on 12×12); traditional blocks use the coarse grids
 they are actually drafted on.
