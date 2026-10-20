@@ -72,8 +72,11 @@ Two more parsing features came with it:
 
     p.quilt({ cols: 4, rows: 5, setting: 'sashed', sashing: 2, innerBorder: 1.5, outerBorder: 4 })
 
-Settings: edge to edge, sashing, sashing with cornerstones, alternate with
-plain squares. Plus three switches from the tea-party quilt:
+Settings: edge to edge, sashing, sashing with cornerstones, alternate (with
+plain squares, or with a second block via `alternateWith`), and a panel centre
+with the block set into the corners of the outer border. Blocks may be
+rectangles. Borders are the old inner/outer pair or a `borders` list of any
+length. See docs/pattern-pile.md for where each of these came from. Plus three switches from the tea-party quilt:
 
 - `mirror` flips every other block left to right (`mirrorDef` re-emits the
   grid with each unit's origin moved to its mirrored column).

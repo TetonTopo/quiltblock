@@ -14,6 +14,8 @@
  * geometry rather than typed in, so it cannot lie.
  */
 
+import { PILE } from './pile.js';
+
 export const FABRICS = {
   sky: { name: 'Sky blue solid', hex: '#CFE3F2' },
   grass: { name: 'Meadow green', hex: '#9DBB7A' },
@@ -53,7 +55,7 @@ export const FABRICS = {
 
 const F = FABRICS;
 
-export const LIBRARY = [
+const STARTER = [
   /* ---------------------------------------------------------- pictures --- */
   {
     id: 'cow',
@@ -440,16 +442,16 @@ export const LIBRARY = [
     id: 'sawtooth-star',
     name: 'Sawtooth star',
     subject: 'Stars',
-    blurb: 'Eight flying geese around a plain centre. The block every sampler starts with.',
+    blurb: 'Four flying geese around a plain centre: background geese, star-fabric sky, eight points. The block every sampler starts with.',
     grid: 4,
     fabrics: { k: F.oat, s: F.indigo, c: F.madder },
     accent: 's',
     rotate: ['#2F4A7A', '#B8453A', '#7E9A7A', '#6E4A32'],
     rows: [
-      'k   s^k .   k',
-      's<k c   c   s>k',
+      'k   kvs .   k',
+      'k>s c   c   k<s',
       '.   c   c   .',
-      'k   svk .   k',
+      'k   k^s .   k',
     ],
   },
   {
@@ -570,6 +572,9 @@ export const LIBRARY = [
     ],
   },
 ];
+
+/** The starter library, then everything drafted from Mom's pile (pile.js). */
+export const LIBRARY = [...STARTER, ...PILE];
 
 /**
  * Hexagon patterns are a different animal - hand-sewn over papers, not cut

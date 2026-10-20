@@ -263,7 +263,7 @@ test('the pieces exactly fill the block, with no gaps or overlaps, both ways', (
     for (const corners of ['flip', 'hst']) {
       const p = makePattern(def, { corners });
       const area = p.block.pieces.reduce((s, x) => s + polygonArea(x.polygon), 0);
-      const expected = p.block.size * p.block.size;
+      const expected = p.block.width * p.block.height;
       ok(Math.abs(area - expected) < 1, `${def.id} (${corners}) covers its block (${area} vs ${expected})`);
     }
   }
@@ -306,12 +306,12 @@ test('stitch-and-flip corners are costed as small squares of the corner fabric',
 
 test('flying geese are costed as one large square and four small', () => {
   const p = makePattern(byId('sawtooth-star'), { seam: 'quarter' });
-  const star = p.cutting.fabrics.find((f) => f.fabric === 's');
-  const large = star.entries.find((e) => e.construction === 'geese');
+  const bg = p.cutting.fabrics.find((f) => f.fabric === 'k');
+  const large = bg.entries.find((e) => e.construction === 'geese');
   eq(large.qty, 1, 'one no-waste set yields all four geese');
   eq(large.cut, '7¼" square', 'a 3x6 finished goose needs a 7 1/4" square');
-  const bg = p.cutting.fabrics.find((f) => f.fabric === 'k');
-  const small = bg.entries.find((e) => e.construction === 'geese-sky');
+  const star = p.cutting.fabrics.find((f) => f.fabric === 's');
+  const small = star.entries.find((e) => e.construction === 'geese-sky');
   eq(small.qty, 4, 'four small squares per set');
   eq(small.cut, '3⅞" square', 'small squares are finished height plus 7/8"');
 });

@@ -510,7 +510,24 @@ function quiltFor(p) {
     mirror: o.mirror,
     rainbow: o.rainbow,
     piecedBorder: o.piecedBorder,
+    // A block drafted from a real quilt carries that quilt's setting: its stack
+    // of borders, its panel, the second block it alternates with.
+    borders: o.borders,
+    panel: o.panel,
+    cornerBlocks: o.cornerBlocks,
+    alternateWith: o.setting === 'alternate' ? alternateFor(p, o.alternateWith) : null,
   });
+}
+
+/** The second block for an alternate setting, made at the same size, or null for plain squares. */
+function alternateFor(p, id) {
+  if (!id || !DEFS.has(id)) return null;
+  try {
+    const alt = patternFor(id, { blockSize: p.block.blockSize });
+    return alt && alt.block.width === p.block.width && alt.block.height === p.block.height ? alt.block : null;
+  } catch {
+    return null;
+  }
 }
 
 /** A printed panel is bought as one piece, not as strips. */
@@ -545,6 +562,8 @@ function renderPlanner(p) {
   $('#q-note').textContent =
     `${SETTINGS[o.setting].blurb} ` +
     (q.mini ? `The outer border is ${fmt(q.outerBorder)} so a ${q.mini.inches}" block fits in it exactly. ` : '') +
+    (o.borders ? `${q.borderList.length} borders as the original quilt has them: ${q.borderList.map((b) => fmt(b.width)).join(', ')}. Change either border control to use your own. ` : '') +
+    (q.alternateBlock ? `Alternates with ${q.alternateBlock.name}. ` : '') +
     (q.rainbow ? `The background changes block by block, so it is bought as ${q.cutting.filter((f) => f.fabric.startsWith('rainbow')).length} fat quarters or so instead of one fabric.` : '');
 
   $('#q-svg').innerHTML = q.svg({ scale: 0.6 });
@@ -1163,8 +1182,9 @@ $('#q-cols').onchange = plannerChange((o, el) => { o.cols = Number(el.value); o.
 $('#q-rows').onchange = plannerChange((o, el) => { o.rows = Number(el.value); o.preset = 'custom'; });
 $('#q-setting').onchange = plannerChange((o, el) => { o.setting = el.value; });
 $('#q-sashing').onchange = plannerChange((o, el) => { o.sashing = Number(el.value); });
-$('#q-inner').onchange = plannerChange((o, el) => { o.innerBorder = Number(el.value); });
-$('#q-outer').onchange = plannerChange((o, el) => { o.outerBorder = Number(el.value); if (!o.outerBorder) o.piecedBorder = false; });
+// Touching either border control swaps the original quilt's border stack for the simple pair.
+$('#q-inner').onchange = plannerChange((o, el) => { o.innerBorder = Number(el.value); delete o.borders; });
+$('#q-outer').onchange = plannerChange((o, el) => { o.outerBorder = Number(el.value); delete o.borders; if (!o.outerBorder) o.piecedBorder = false; });
 $('#q-mirror').onchange = plannerChange((o, el) => { o.mirror = el.checked; });
 $('#q-rainbow').onchange = plannerChange((o, el) => { o.rainbow = el.checked; });
 $('#q-pieced').onchange = plannerChange((o, el) => { o.piecedBorder = el.checked; });

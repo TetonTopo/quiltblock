@@ -42,8 +42,8 @@ export const SETTINGS = {
   },
   alternate: {
     id: 'alternate',
-    name: 'Alternate with plain squares',
-    blurb: 'Every other block is a plain square, like chickens spaced along a roost. Half the piecing, room to quilt.',
+    name: 'Alternate blocks',
+    blurb: 'Every other block is a plain square, like chickens spaced along a roost - or a second pieced block, checkerboard fashion. Half the piecing, room to quilt.',
   },
   panel: {
     id: 'panel',

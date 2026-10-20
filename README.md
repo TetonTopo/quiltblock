@@ -192,13 +192,14 @@ packages/pattern-core/
   src/fpp.js                      foundation paper piecing
   src/render.js                   SVG
   src/blocks.js                   the starter library
+  src/pile.js                     35 blocks drafted from Mom's scanned patterns
   src/tiles.js                    full-size pages with overlap and registration marks
   test/                           the suite
 netlify/functions/generate.js     the generator (holds the API key)
 netlify/lib/draft.js              the gate a generated draft must pass (tested, no key needed)
 netlify/functions/checkout.js     payment scaffold, deliberately not wired up
 tools/serve.ps1                   zero-dependency static server for Windows
-docs/                             the grid DSL, quilts, deploying, commerce
+docs/                             the grid DSL, quilts, Mom's pile, deploying, commerce
 ```
 
 ## The grid DSL

@@ -16,8 +16,11 @@ import { tierOfScore } from './tiers.js';
 export const LIMITS = {
   maxFabrics: 8,
   maxFabricsHard: 50,
-  /** The advanced tier lives up near this; a feathered star is 70-odd pieces. */
-  maxPieces: 80,
+  /**
+   * A feathered star is 70-odd pieces, and the 16" medallion stars in the
+   * pile run to 88. The generator's tiers cap far lower than this.
+   */
+  maxPieces: 100,
   comfortablePieces: 30,
   minPieces: 8,
   /** Anything under 3/4" finished is miserable to sew and worse to press. */
