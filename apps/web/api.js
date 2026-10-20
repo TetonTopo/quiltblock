@@ -21,7 +21,7 @@ export function generatorStatus() {
   if (!generatorProbe) {
     generatorProbe = fetch(`${API_BASE}/generate`, { method: 'GET' })
       .then((r) => (r.ok ? r.json() : { available: false }))
-      .then((d) => ({ available: Boolean(d.available), model: d.model }))
+      .then((d) => ({ available: Boolean(d.available), model: d.model, needsCode: Boolean(d.needsCode) }))
       .catch(() => ({ available: false }));
   }
   return generatorProbe;
@@ -31,7 +31,7 @@ export function generatorStatus() {
  * Ask the server to design a block. Returns a block definition in the grid DSL
  * that `pattern-core` can build, plus whatever the model said about it.
  */
-export async function generate({ prompt, photo, fabricLimit, gridSize, blockSize, tier }) {
+export async function generate({ prompt, photo, fabricLimit, gridSize, blockSize, tier, code }) {
   const status = await generatorStatus();
   if (!status.available) {
     return { ...(await mockGenerate({ prompt, fabricLimit, gridSize, tier })), mock: true };
@@ -42,7 +42,8 @@ export async function generate({ prompt, photo, fabricLimit, gridSize, blockSize
 
   const res = await fetch(`${API_BASE}/generate`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    // While the shop is in testing the server wants a tester code.
+    headers: { 'content-type': 'application/json', ...(code ? { 'x-quiltblock-code': code } : {}) },
     body: JSON.stringify(body),
   });
 

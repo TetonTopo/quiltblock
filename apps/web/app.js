@@ -123,6 +123,12 @@ const priceOf = (p) =>
 
 const tierBadge = (tier) => `<span class="badge tier-${tier.id}">${esc(tier.short ?? tier.name)}</span>`;
 
+/** Pieces under the house 3/4" are allowed in Advanced patterns, and always labelled. */
+const bendBadge = (p) => {
+  const w = p.validation.warnings.find((x) => x.rule === 'bends-rule');
+  return w ? ` <span class="badge tier-advanced" title="${esc(w.message)}">Bends the ¾" rule</span>` : '';
+};
+
 /* ------------------------------------------------------------------- home */
 
 const HOUSE_RULES = [
@@ -226,7 +232,7 @@ function renderDetail() {
   const p = patternFor(state.blockId);
   if (!p) return;
 
-  $('#d-subject').innerHTML = `${esc(p.def.subject)}${p.def.custom ? ' · generated' : ''} ${tierBadge(p.tier)}`;
+  $('#d-subject').innerHTML = `${esc(p.def.subject)}${p.def.custom ? ' · generated' : ''} ${tierBadge(p.tier)}${bendBadge(p)}`;
   $('#d-name').textContent = p.def.name;
   $('#d-blurb').textContent = p.def.blurb ?? '';
 
@@ -240,7 +246,9 @@ function renderDetail() {
     Object.values(TRIM_STYLES).map((t) => [t.id, t.recommended ? `${t.name} — recommended` : t.name]),
     state.trim,
   );
-  fillSelect($('#f-size'), p.sizes.map((s) => [s, `${s}" finished`]), p.block.blockSize);
+  // A tall block is sized by its width; show both sides so 7 reads as 7 x 9.
+  const tall = p.block.gridRows / p.block.gridSize;
+  fillSelect($('#f-size'), p.sizes.map((s) => [s, tall === 1 ? `${s}" finished` : `${s} × ${+(s * tall).toFixed(2)}" finished`]), p.block.blockSize);
   fillSelect(
     $('#f-corners'),
     Object.values(CORNER_METHODS).map((c) => [c.id, c.recommended ? `${c.name} — recommended` : c.name]),
@@ -735,6 +743,7 @@ async function runGenerate(prompt) {
       gridSize: Number($('#f-grid').value),
       blockSize: state.blockSize,
       tier,
+      code: rememberCode($('#f-code').value.trim()),
     });
 
     const def = { ...result.block, custom: true };
@@ -765,7 +774,7 @@ async function runGenerate(prompt) {
     $('#stage-empty').hidden = false;
     $('#stage-empty').textContent = 'That one did not come out. Try describing it a different way.';
     $('#gen-error').innerHTML = `<div class="callout flag" style="margin-top:12px">
-      <strong>${esc(err instanceof GenerateError ? 'The block came back breaking a rule.' : 'The generator could not be reached.')}</strong>
+      <strong>${esc(err instanceof GenerateError ? (err.detail?.needsCode ? 'The live generator needs a tester code.' : 'The design did not come through.') : 'The generator could not be reached.')}</strong>
       <span>${esc(err.message)}</span></div>`;
   } finally {
     $('#generate').disabled = false;
@@ -798,15 +807,43 @@ function checksHtml(p, result, tier) {
   </div>`;
 }
 
+/**
+ * A phone photo is 5-10 MB, which is over what a server function will take
+ * and far more detail than a quilt block needs. Shrink it to 1568 pixels on
+ * the long side (the most the model looks at anyway) and send it as a JPEG.
+ */
+const PHOTO_EDGE = 1568;
+
 function readPhoto(file) {
   if (!file) return Promise.resolve(null);
   return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = () =>
-      resolve({ media_type: file.type, data: String(reader.result).split(',')[1] });
-    reader.onerror = () => resolve(null);
-    reader.readAsDataURL(file);
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, PHOTO_EDGE / Math.max(img.naturalWidth, img.naturalHeight));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.naturalWidth * k);
+      canvas.height = Math.round(img.naturalHeight * k);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      resolve({ media_type: 'image/jpeg', data: canvas.toDataURL('image/jpeg', 0.85).split(',')[1] });
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(null);
+    };
+    img.src = url;
   });
+}
+
+/** The tester code is remembered on this device so it is typed once. */
+function rememberCode(code) {
+  try {
+    if (code) localStorage.setItem('quiltblock.code', code);
+    return code || localStorage.getItem('quiltblock.code') || '';
+  } catch {
+    return code;
+  }
 }
 
 /* -------------------------------------------------------------- checkout */
@@ -920,6 +957,7 @@ function renderPrint() {
         <h1 style="font-size:2rem;margin:4px 0">${esc(p.def.name)}</h1>
         <p class="num">${p.block.sizeLabel} finished block &middot; ${p.block.pieces.length} pieces &middot;
           ${esc(p.math.seam.name)} seam &middot; ${esc(p.difficulty.level)} &middot; quilt ${esc(q.finished.label)}, ${q.counts.pieced} blocks</p>
+        ${p.difficulty.bendsRule ? `<p style="font-size:.85rem"><strong>Bends the ¾" rule.</strong> ${esc(p.validation.warnings.find((w) => w.rule === 'bends-rule')?.message.replace(/^Bends the ¾" rule: /, '') ?? '')}</p>` : ''}
       </div>
       <div class="test-square">1 inch<br>check me</div>
     </div>
@@ -1228,6 +1266,8 @@ renderTierControls();
 route();
 
 generatorStatus().then((s) => {
+  $('#code-field').hidden = !(s.available && s.needsCode);
+  try { $('#f-code').value = localStorage.getItem('quiltblock.code') ?? ''; } catch { /* private window */ }
   $('#gen-mode').textContent = s.available ? `live · ${s.model ?? 'Claude'}` : 'stand-in generator';
   $('#gen-mode').title = s.available
     ? 'A server function with an API key is answering.'

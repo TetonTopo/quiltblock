@@ -30,9 +30,22 @@ import {
   DEFAULT_TIER,
 } from '../../packages/pattern-core/src/index.js';
 import { checkDraft, toDefinition, clamp } from '../lib/draft.js';
+import { limitsFromEnv, sameCode, hashIp, admit, finish, memoryStore } from '../lib/limits.js';
 
-const MODEL = process.env.QUILTBLOCK_MODEL || 'claude-opus-5';
+/** The default model. QUILTBLOCK_MODEL overrides it without a code change. */
+const MODEL = 'claude-opus-5-5';
 const MAX_ATTEMPTS = 2;
+
+/** Netlify stops a synchronous function at 60 seconds; leave room to answer. */
+const DEADLINE_MS = 55_000;
+/** Do not start a second attempt with less than this left. */
+const MIN_ATTEMPT_MS = 20_000;
+
+/** QUILTBLOCK_EFFORT picks one of these; medium is the default. */
+const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
+
+/** About 4 MB of image once decoded. The page shrinks photos well below this. */
+const MAX_PHOTO_BASE64 = 5_500_000;
 
 /** Hard ceiling so a runaway request cannot run up a bill. */
 const MAX_TOKENS = 8000;
@@ -136,43 +149,113 @@ const BLOCK_TOOL = {
   },
 };
 
-const json = (status, body) => ({
-  statusCode: status,
-  headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
-  body: JSON.stringify(body),
-});
+const env = (k) => globalThis.Netlify?.env?.get(k) ?? process.env[k];
 
-let client = null;
-function anthropic() {
-  if (!client) client = new Anthropic(); // reads ANTHROPIC_API_KEY from the environment
-  return client;
+const json = (status, body, headers = {}) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...headers },
+  });
+
+/**
+ * The rate-limit records live in a site-wide Blobs store. Off Netlify (the
+ * local test harness) there is no Blobs, so an in-memory store stands in. On
+ * Netlify a store that will not open is an error: better to refuse a request
+ * than to call the model with the limits switched off.
+ */
+let localStore = null;
+async function limitsStore() {
+  try {
+    const { getStore } = await import('@netlify/blobs');
+    return getStore({ name: 'generator-limits', consistency: 'strong' });
+  } catch (err) {
+    if (globalThis.Netlify) throw err;
+    localStore ??= memoryStore();
+    return localStore;
+  }
 }
 
-export async function handler(event) {
-  const configured = Boolean(process.env.ANTHROPIC_API_KEY);
+/**
+ * GET  -> { available, model, needsCode } so the page can say "live" honestly.
+ * POST -> { block, notes, stats, ... } or an error the page can show.
+ */
+export default async function handler(req, context = {}) {
+  const limits = limitsFromEnv(env);
+  const configured = Boolean(env('ANTHROPIC_API_KEY')) && limits.enabled;
 
-  // The browser probes with GET so it can show "live" or "stand-in" honestly.
-  if (event.httpMethod === 'GET') {
-    return json(200, { available: configured, model: configured ? MODEL : null });
+  if (req.method === 'GET') {
+    return json(200, { available: configured, model: configured ? model() : null, needsCode: Boolean(limits.accessCode) });
   }
-  if (event.httpMethod !== 'POST') return json(405, { error: 'Use POST.' });
+  if (req.method !== 'POST') return json(405, { error: 'Use POST.' });
   if (!configured) return json(503, { error: 'No API key is configured on this deployment.' });
 
   let body;
   try {
-    body = JSON.parse(event.body || '{}');
+    body = await req.json();
   } catch {
     return json(400, { error: 'Body must be JSON.' });
   }
 
+  if (limits.accessCode && !sameCode(req.headers.get('x-quiltblock-code') ?? body.code, limits.accessCode)) {
+    return json(401, { error: 'The generator is in testing. Enter the tester code to use it.', needsCode: true });
+  }
+
+  let store;
+  let gate;
+  try {
+    store = await limitsStore();
+    const ipHash = await hashIp(context.ip ?? req.headers.get('x-nf-client-connection-ip'), limits.salt);
+    gate = await admit(store, { ipHash, limits, meta: { tier: String(body.tier ?? ''), photo: Boolean(body.photo) } });
+  } catch (err) {
+    console.error('rate limit store failed', err);
+    return json(503, { error: 'The generator is unavailable right now. Try again shortly.' });
+  }
+  if (!gate.ok) return json(gate.status, { error: gate.error }, { 'retry-after': String(gate.retryAfter) });
+
+  const result = await generateBlock(body, { client: anthropic() });
+  await finish(store, gate.record, {
+    status: result.status,
+    attempts: result.body.attempts ?? null,
+    usage: result.body.usage ?? null,
+    ms: result.ms,
+  });
+  return json(result.status, result.body);
+}
+
+let client = null;
+function anthropic() {
+  // The SDK's own retries are capped at one: the deadline below is the real budget.
+  if (!client) client = new Anthropic({ apiKey: env('ANTHROPIC_API_KEY'), maxRetries: 1 });
+  return client;
+}
+
+const model = () => env('QUILTBLOCK_MODEL') || MODEL;
+
+/** Swap in a stand-in client (tests), or null to go back to the real one. */
+export function useClient(c) {
+  client = c;
+}
+
+/**
+ * Design one block. Exported so tools/try-generate.mjs can run the real thing
+ * from a laptop with nothing deployed. Returns `{ status, body, ms }`.
+ */
+export async function generateBlock(body, { client, now = Date.now } = {}) {
+  const started = now();
+  const done = (status, out) => ({ status, body: out, ms: now() - started });
+
   const prompt = String(body.prompt || '').slice(0, 600).trim();
   const photo = body.photo;
-  if (!prompt && !photo) return json(400, { error: 'Send a description or a photo.' });
+  if (!prompt && !photo) return done(400, { error: 'Send a description or a photo.' });
+  if (photo?.data && photo.data.length > MAX_PHOTO_BASE64) {
+    return done(413, { error: 'That photo is too large. Try one under 4 MB, or a smaller crop.' });
+  }
 
   const tier = TIERS[body.tier] ?? TIERS[DEFAULT_TIER];
   const gridSize = clamp(Number(body.gridSize) || tier.grids[1] || 8, 3, 12);
   const fabricLimit = clamp(Number(body.fabricLimit) || 4, 2, 10);
   const blockSize = clamp(Number(body.blockSize) || 12, 6, 36);
+  const effort = EFFORTS.includes(env('QUILTBLOCK_EFFORT')) ? env('QUILTBLOCK_EFFORT') : 'medium';
 
   const content = [];
   if (photo?.data && /^image\/(png|jpeg|webp|gif)$/.test(photo.media_type || '')) {
@@ -193,41 +276,67 @@ export async function handler(event) {
 
   const messages = [{ role: 'user', content }];
   const attempts = [];
+  const usage = { input_tokens: 0, output_tokens: 0 };
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const left = DEADLINE_MS - (now() - started);
+    // A second attempt that cannot finish before the platform kills the
+    // function is worse than an honest error now.
+    if (attempt > 1 && left < MIN_ATTEMPT_MS) {
+      attempts.push('Ran out of time for another try.');
+      break;
+    }
+
     let response;
     try {
-      response = await anthropic().beta.messages.create({
-        model: MODEL,
-        max_tokens: MAX_TOKENS,
-        // A refusal on "draw me a cow" would be surprising, but a shop that
-        // takes public input should degrade to a working model, not a 500.
-        betas: ['server-side-fallback-2026-07-01'],
-        fallbacks: 'default',
-        thinking: { type: 'adaptive' },
-        output_config: { effort: 'high' },
-        system: [{ type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } }],
-        tools: [BLOCK_TOOL],
-        tool_choice: { type: 'tool', name: 'draft_block' },
-        messages,
-      });
+      response = await client.beta.messages.create(
+        {
+          model: model(),
+          max_tokens: MAX_TOKENS,
+          // A refusal on "draw me a cow" would be surprising, but a shop that
+          // takes public input should degrade to a working model, not a 500.
+          betas: ['server-side-fallback-2026-07-01'],
+          fallbacks: 'default',
+          thinking: { type: 'adaptive' },
+          output_config: { effort },
+          system: [{ type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } }],
+          tools: [BLOCK_TOOL],
+          // Current models do not accept a forced tool choice; the system
+          // prompt asks for exactly one draft_block call and strict mode keeps
+          // its arguments to the schema.
+          tool_choice: { type: 'auto' },
+          messages,
+        },
+        { timeout: Math.max(5_000, left) },
+      );
     } catch (err) {
-      return json(err?.status === 429 ? 429 : 502, {
-        error: err?.status === 429 ? 'The generator is busy. Try again in a moment.' : 'The generator failed.',
+      const status = err?.status === 429 ? 429 : 502;
+      return done(status, {
+        error: status === 429 ? 'The generator is busy. Try again in a moment.' : 'The generator failed.',
         detail: String(err?.message ?? err).slice(0, 300),
+        attempts: attempt,
       });
     }
 
+    usage.input_tokens += response.usage?.input_tokens ?? 0;
+    usage.output_tokens += response.usage?.output_tokens ?? 0;
+
     if (response.stop_reason === 'refusal') {
-      return json(422, {
+      return done(422, {
         error: 'The model declined to design that one. Try describing it differently.',
         category: response.stop_details?.category ?? null,
+        attempts: attempt,
+        usage,
       });
     }
 
     const call = response.content.find((b) => b.type === 'tool_use' && b.name === 'draft_block');
     if (!call) {
-      attempts.push('The model did not call draft_block.');
+      attempts.push(response.stop_reason === 'max_tokens' ? 'The design ran out of room.' : 'The model did not call draft_block.');
+      messages.push(
+        { role: 'assistant', content: response.content },
+        { role: 'user', content: 'Call the draft_block tool with the finished design.' },
+      );
       continue;
     }
 
@@ -237,7 +346,7 @@ export async function handler(event) {
 
     if (!problem) {
       const block = buildBlock(def, { blockSize });
-      return json(200, {
+      return done(200, {
         block: def,
         notes: draft.notes,
         stats: {
@@ -249,9 +358,9 @@ export async function handler(event) {
           difficulty: difficultyOf(block),
         },
         tier: tier.id,
-        model: MODEL,
+        model: response.model ?? model(),
         attempts: attempt,
-        usage: response.usage,
+        usage,
       });
     }
 
@@ -259,6 +368,7 @@ export async function handler(event) {
     if (attempt === MAX_ATTEMPTS) break;
 
     // Hand the failure back in the model's own terms and let it fix the draft.
+    // The history is only ever appended to, never edited.
     messages.push(
       { role: 'assistant', content: response.content },
       {
@@ -275,9 +385,10 @@ export async function handler(event) {
     );
   }
 
-  return json(422, {
+  return done(422, {
     error: 'The block came back breaking the rules twice, so it was not shown.',
     attempts,
+    usage,
   });
 }
 

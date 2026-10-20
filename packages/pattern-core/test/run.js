@@ -17,6 +17,13 @@
 const { report } = await import('./core.test.js');
 const r = report();
 
+// The generator's own tests need Node (the Anthropic SDK), so only this
+// runner includes them; the browser runs core.test.js alone.
+const g = await (await import('../../../netlify/test/generator.test.js')).report();
+for (const k of ['total', 'passed', 'failed', 'assertions']) r[k] += g[k];
+r.lines.push(...g.lines);
+r.failures.push(...g.failures);
+
 for (const line of r.lines) console.log(line);
 console.log('');
 console.log(`${r.passed}/${r.total} tests, ${r.assertions} assertions`);
