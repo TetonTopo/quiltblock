@@ -280,6 +280,14 @@ export function quiltLayoutSvg(qp, { scale = 0.5, labels = false, rotate = true 
       out.push(`<g transform="translate(${S(c.x)},${S(c.y)})">${inner}</g>`);
       continue;
     }
+    if (c.type === 'panel') {
+      // A printed panel: show where it goes and what it is, not a picture of it.
+      out.push(
+        `<rect x="${S(c.x)}" y="${S(c.y)}" width="${S(c.w)}" height="${S(c.h)}" fill="${extra('panel')}" stroke="${INK}" stroke-opacity="0.35" stroke-width="0.8"/>` +
+          `<text x="${S(c.x + c.w / 2)}" y="${S(c.y + c.h / 2)}" font-family="Karla, Arial, sans-serif" font-size="${Math.max(8, S(c.h / 10))}" text-anchor="middle" dominant-baseline="central" fill="${INK}" opacity="0.6">${esc(qp.extras.panel?.name ?? 'Panel')}</text>`,
+      );
+      continue;
+    }
     const fill = c.type === 'plain' ? extra('plain') : c.type === 'stone' ? extra('cornerstone') : extra('sashing');
     out.push(`<rect x="${S(c.x)}" y="${S(c.y)}" width="${S(c.w)}" height="${S(c.h)}" fill="${fill}" stroke="${INK}" stroke-opacity="0.35" stroke-width="0.8"/>`);
   }

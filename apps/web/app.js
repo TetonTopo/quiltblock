@@ -513,6 +513,15 @@ function quiltFor(p) {
   });
 }
 
+/** A printed panel is bought as one piece, not as strips. */
+function panelRow(q, short = false) {
+  if (!q.panel) return '';
+  const cut = `trim to ${q.panel.w + 0.5}" × ${q.panel.h + 0.5}"`;
+  return short
+    ? `<tr><td>${esc(q.panel.name)}</td><td class="qty">1 panel</td><td class="num">${cut}</td></tr>`
+    : `<tr><td><strong>${esc(q.panel.name)}</strong></td><td class="qty">1 panel</td><td class="num" style="font-size:.85em">${cut}</td><td class="muted" style="font-size:.85em">the centre of the quilt</td></tr>`;
+}
+
 function renderPlanner(p) {
   const o = quiltOptsFor(p.def);
   const q = quiltFor(p);
@@ -530,6 +539,7 @@ function renderPlanner(p) {
   $('#q-pieced').checked = o.piecedBorder;
   $('#q-sashing').disabled = !(o.setting === 'sashed' || o.setting === 'cornerstones');
   $('#q-pieced').disabled = !o.outerBorder;
+  $('#q-cols').disabled = $('#q-rows').disabled = o.setting === 'panel';
 
   $('#q-size-line').textContent = `${q.finished.label} · closest to a ${q.sizeName.name.toLowerCase()}`;
   $('#q-note').textContent =
@@ -543,7 +553,7 @@ function renderPlanner(p) {
   $('#q-fabrics').innerHTML = `
     <div class="tablewrap">
       <table class="spec">
-        <caption>Fabric requirements &mdash; ${q.counts.pieced} block${q.counts.pieced === 1 ? '' : 's'}${q.counts.minis ? ` + ${q.counts.minis} border blocks` : ''}, ${esc(q.finished.label)}</caption>
+        <caption>Fabric requirements &mdash; ${q.panel ? `a ${q.panel.w}" × ${q.panel.h}" panel${q.counts.corners ? ` and ${q.counts.corners} corner blocks` : ''}` : `${q.counts.pieced} block${q.counts.pieced === 1 ? '' : 's'}`}${q.counts.minis ? ` + ${q.counts.minis} border blocks` : ''}, ${esc(q.finished.label)}</caption>
         <thead><tr><th>Fabric</th><th class="qty">Buy</th><th>Cut as strips</th><th>For</th></tr></thead>
         <tbody>${q.cutting
           .map(
@@ -555,6 +565,7 @@ function renderPlanner(p) {
             </tr>`,
           )
           .join('')}
+          ${panelRow(q)}
           <tr><td><strong>Backing</strong></td><td class="qty">${esc(q.backing.yardage.label)}</td><td class="num" style="font-size:.85em">${q.backing.panels} panel${q.backing.panels === 1 ? '' : 's'}, ${esc(q.backing.wideback.label)} of 108" wideback</td><td class="muted" style="font-size:.85em">${esc(q.backing.label)}</td></tr>
           <tr><td><strong>Batting</strong></td><td class="qty">—</td><td class="num" style="font-size:.85em">${esc(q.batting.label)}</td><td class="muted" style="font-size:.85em">crib, throw or twin size as sold</td></tr>
         </tbody>
@@ -905,6 +916,7 @@ function renderPrint() {
       <tbody>${q.cutting
         .map((fab) => `<tr><td>${esc(fab.name)}</td><td class="qty">${esc(fab.yardage.label)}</td><td class="num">${fab.strips.strips.map((s) => `${s.count} × ${esc(s.widthLabel)}`).join(', ')}</td></tr>`)
         .join('')}
+        ${panelRow(q, true)}
         <tr><td>Backing</td><td class="qty">${esc(q.backing.yardage.label)}</td><td class="num">${esc(q.backing.label)}, ${q.backing.panels} panel${q.backing.panels === 1 ? '' : 's'}</td></tr>
         <tr><td>Batting</td><td class="qty">—</td><td class="num">${esc(q.batting.label)}</td></tr>
       </tbody></table>

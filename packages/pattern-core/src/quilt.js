@@ -45,7 +45,15 @@ export const SETTINGS = {
     name: 'Alternate with plain squares',
     blurb: 'Every other block is a plain square, like chickens spaced along a roost. Half the piecing, room to quilt.',
   },
+  panel: {
+    id: 'panel',
+    name: 'Panel centre',
+    blurb: 'A printed panel in the middle, framed by borders, with the block set into the corners of the outer border.',
+  },
 };
+
+/** A panel is whatever the fabric company printed; this is a common throw-size one. */
+export const DEFAULT_PANEL = { w: 42, h: 36, name: 'Printed panel' };
 
 /** Ten solids in spectrum order, for a rainbow of backgrounds. */
 export const RAINBOW = [
@@ -152,6 +160,9 @@ function spread(total, n, unit = 4) {
  *                     fabric }), innermost first, as many as the quilt has
  *   alternateWith     a second built block, the same size, for the
  *                     'alternate' setting to use instead of plain squares
+ *   panel             { w, h, name } in inches, for the 'panel' setting
+ *   cornerBlocks      set the block, made to the border's width, into the
+ *                     four corners of the outer border (default on for panels)
  *   mirror            flip every other block left to right
  *   rainbow           rotate the background fabric through RAINBOW, block by block
  *   piecedBorder      set small copies of the block into the outer border
@@ -199,17 +210,28 @@ export function planQuilt(block, opts = {}) {
   }
 
   // --- the centre ----------------------------------------------------------
-  const centreW = cols * BW + (sashed ? (cols + 1) * S : 0);
-  const centreH = rows * BH + (sashed ? (rows + 1) * S : 0);
+  // A panel quilt has no grid of blocks in the middle, just the printed panel.
+  const isPanel = setting === 'panel';
+  const panel = isPanel ? { ...DEFAULT_PANEL, ...(opts.panel ?? {}) } : null;
+  if (panel) {
+    panel.W = inches(panel.w);
+    panel.H = inches(panel.h);
+    if (!extras.panel) extras.panel = { name: panel.name, hex: '#C9D8C5' };
+  }
+  const gridCols = isPanel ? 0 : cols;
+  const gridRows = isPanel ? 0 : rows;
+  const centreW = panel ? panel.W : cols * BW + (sashed ? (cols + 1) * S : 0);
+  const centreH = panel ? panel.H : rows * BH + (sashed ? (rows + 1) * S : 0);
   const cells = [];
-  const counts = { pieced: 0, mirrored: 0, plain: 0, alternate: 0, cornerstones: 0, sashes: 0, minis: 0 };
+  const counts = { pieced: 0, mirrored: 0, plain: 0, alternate: 0, cornerstones: 0, sashes: 0, minis: 0, corners: 0 };
+  if (panel) cells.push({ type: 'panel', x: 0, y: 0, w: panel.W, h: panel.H, fabric: 'panel' });
 
   const mirrored = mirror ? buildBlock(mirrorDef(block), { blockSize: block.blockSize, corners: block.corners }) : null;
   const bg = backgroundOf(block);
 
   let index = 0;
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
+  for (let r = 0; r < gridRows; r++) {
+    for (let c = 0; c < gridCols; c++) {
       const x = sashed ? S + c * (BW + S) : c * BW;
       const y = sashed ? S + r * (BH + S) : r * BH;
       const plain = setting === 'alternate' && (r + c) % 2 === 1;
@@ -336,12 +358,36 @@ export function planQuilt(block, opts = {}) {
     }
   }
 
+  // --- corner blocks: the block, made to the border's width, in the four
+  // corners of the outer border - the star blocks on a panel quilt -----------
+  let cornerBlock = null;
+  const wantCorners = opts.cornerBlocks ?? isPanel;
+  if (wantCorners && outermost && !mini && block.square !== false) {
+    const sizeIn = toInches(OBw);
+    if (validSizes(block.gridSize, [sizeIn]).length) {
+      cornerBlock = buildBlock(block, { blockSize: sizeIn, corners: block.corners });
+      for (const side of ['top', 'bottom']) {
+        const b = borders.find((x) => x.which === outermost.id && x.side === side);
+        b.cornerBlocks = true;
+        for (const x of [b.x, b.x + b.w - OBw]) {
+          cells.push({ type: 'block', corner: true, x, y: b.y, w: OBw, h: OBw, block: cornerBlock });
+          counts.corners++;
+        }
+      }
+    }
+  }
+
   // --- cutting ---------------------------------------------------------------
   const groups = newGroups();
   const fabricsMap = { ...block.fabrics };
   for (const [k, f] of Object.entries(extras)) fabricsMap[k] = f;
 
   addBlockCuts(groups, block, math, counts.pieced);
+  if (cornerBlock) {
+    const tmp = newGroups();
+    addBlockCuts(tmp, cornerBlock, math, counts.corners, { forLabel: 'corner blocks' });
+    mergeGroups(groups, tmp);
+  }
   if (rainbow && bg) {
     // The background is not one fabric any more: it is up to ten, each cut for
     // the blocks that wear it. Replace its group with one per colour.
@@ -414,7 +460,9 @@ export function planQuilt(block, opts = {}) {
       addPlainCut(groups, which, { ...sashCut(width, width), qty: 4, purpose: 'outer border corners' });
     } else {
       addPlainCut(groups, which, { ...sashCut(width, sides[0].h), qty: 2, purpose: `${label.toLowerCase()}, sides` });
-      addPlainCut(groups, which, { ...sashCut(tops[0].w, width), qty: 2, purpose: `${label.toLowerCase()}, top and bottom` });
+      // With a block in each corner the top and bottom strips stop short of them.
+      const topLen = which === outermost.id && cornerBlock ? tops[0].w - 2 * width : tops[0].w;
+      addPlainCut(groups, which, { ...sashCut(topLen, width), qty: 2, purpose: `${label.toLowerCase()}, top and bottom` });
     }
   }
 
@@ -453,7 +501,12 @@ export function planQuilt(block, opts = {}) {
 
   // --- steps ---------------------------------------------------------------
   const steps = [];
-  steps.push(
+  if (panel) {
+    steps.push(
+      `Trim the panel to ${fmtSize(panel.W + 2 * a, panel.H + 2 * a)}, keeping at least ${fmt(a)} of background beyond the printed design on every side so nothing important ends up in a seam.`,
+    );
+  }
+  if (counts.pieced) steps.push(
     `Make ${counts.pieced} ${block.name} block${counts.pieced === 1 ? '' : 's'}` +
       (counts.mirrored ? `, ${counts.mirrored} of them mirrored` : '') +
       (rainbow ? ', rotating the background fabric through the rainbow in reading order' : '') +
@@ -465,7 +518,9 @@ export function planQuilt(block, opts = {}) {
     );
   }
   const blockDims = BW === BH ? fmt(BW) : fmtSize(BW, BH);
-  if (setting === 'straight') {
+  if (panel) {
+    // Nothing to lay out: the panel is the centre.
+  } else if (setting === 'straight') {
     steps.push(`Lay the blocks out in ${rows} rows of ${cols}. Sew each row, pressing the seams of odd rows one way and even rows the other so they nest. Join the rows.`);
   } else if (setting === 'alternate' && alt) {
     steps.push(`Lay out ${rows} rows of ${cols}, alternating ${block.name} and ${alt.name} blocks, checkerboard fashion. Sew each row, pressing the row seams in alternate directions so they nest. Join the rows.`);
@@ -488,6 +543,13 @@ export function planQuilt(block, opts = {}) {
           `${bs.find((b) => b.side === 'top').minis} across the top and bottom and ${bs.find((b) => b.side === 'left').minis} down each side. Add a corner square to each end of the top and bottom strips.`,
       );
       steps.push(`Sew the side border strips on first, then the top and bottom. Press toward the border.`);
+      continue;
+    }
+    if (which === outermost.id && cornerBlock) {
+      steps.push(
+        `Make ${counts.corners} ${block.name} blocks at ${fmt(width)} finished for the corners. ` +
+          `${label}, ${fmt(width)} finished: sew the side strips on and press toward the border. Sew a corner block to each end of the top and bottom strips, pressing toward the strip, then sew them on, nesting the seams at the corners.`,
+      );
       continue;
     }
     steps.push(
@@ -513,6 +575,8 @@ export function planQuilt(block, opts = {}) {
     mirroredBlock: mirrored,
     mini,
     alternateBlock: alt,
+    panel,
+    cornerBlock,
     size: BW,
     blockW: BW,
     blockH: BH,

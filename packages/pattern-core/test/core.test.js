@@ -15,7 +15,7 @@ import {
   validateBlock, difficultyOf,
   makePattern, buildLibrary,
   LIBRARY, HEXAGON_LIBRARY,
-  quiltSvg,
+  quiltSvg, quiltLayoutSvg,
   polygonArea,
   TIERS, TIER_ORDER, tierOfScore,
   COLORWAYS, applyColorway,
@@ -797,6 +797,27 @@ test('alternate blocks can be a second pieced block', () => {
   const total = (k) => q.cutting.flatMap((f) => f.entries).filter((e) => e.purpose.includes(k)).length;
   ok(total('Nine patch blocks') > 0, 'and the cutting list charges them');
   throws(() => planQuilt(star, { setting: 'alternate', alternateWith: buildBlock(byId('nine-patch'), { blockSize: 9 }) }), 'must match', 'sizes must match');
+});
+
+test('a panel quilt frames a printed panel and sets the block in the corners', () => {
+  // Riley Blake's Wild and Free: a 42 × 36 panel, an 8" border, 8" stars at the corners.
+  const star = buildBlock(byId('sawtooth-star'), { blockSize: 12 });
+  const q = planQuilt(star, { setting: 'panel', panel: { w: 42, h: 36, name: 'Wild and Free panel' }, borders: [8] });
+  eq(q.finished.label, '58" × 52"', 'the finished size the pattern prints');
+  eq(q.cells.filter((c) => c.type === 'panel').length, 1, 'one panel');
+  const corners = q.cells.filter((c) => c.corner);
+  eq(corners.length, 4, 'four corner blocks');
+  eq(q.cornerBlock.blockSize, 8, 'made to the border width');
+  ok(corners.every((c) => c.w === inches(8)), 'each 8" square');
+  eq(q.counts.pieced, 0, 'no blocks in the centre');
+  const border = q.cutting.find((f) => f.fabric === 'border1').entries.map((e) => e.cut);
+  ok(border.includes('8½" × 36½"') && border.includes('42½" × 8½"'), `strips stop short of the corner blocks (${border})`);
+  ok(q.steps[0].includes('Trim the panel to 42½" × 36½"'), 'first, trim the panel');
+  ok(q.steps.some((s) => s.includes('corner block to each end')), 'and the corner blocks go on the top and bottom strips');
+  ok(quiltLayoutSvg(q).includes('Wild and Free panel'), 'the layout names the panel');
+  ok(planQuilt(star, { setting: 'panel', borders: [3], cornerBlocks: false }).cornerBlock === null, 'corner blocks can be turned off');
+  const ohio = buildBlock(byId('ohio-star'), { blockSize: 12 });
+  ok(planQuilt(ohio, { setting: 'panel', borders: [5] }).cornerBlock === null, 'and are skipped when a 3-grid block will not make 5"');
 });
 
 // ---------------------------------------------------------------- tiles ----
