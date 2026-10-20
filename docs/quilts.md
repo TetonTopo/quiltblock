@@ -128,6 +128,18 @@ against the original hexes.
   strip cutting, exploded block, pressing plan, block cutting, sew order, quilt
   assembly, coloring sheet.
 
+## Full-size pages
+
+`tiles.js` prints any drawing at 100% across as many sheets as it needs:
+letter, legal, tabloid or A4, portrait or landscape, whichever takes fewer
+sheets. Neighbouring pages overlap by half an inch, and both pages draw the
+same registration marks in that strip, so trimming one page along its dashed
+edge and laying it over the other lines the drawing back up. Pages are named
+like a map (A1, A2, B1...), each says which neighbours it goes over, and each
+carries a one-inch ruler and a little map of where it sits. The print view
+uses it for the full-size block and for every foundation-piecing section, so
+an 18" maple leaf is six letter sheets and a cat section is two.
+
 ## Hexagons
 
 `hexagons.js` is deliberately not part of the block engine. Hexagons meet at

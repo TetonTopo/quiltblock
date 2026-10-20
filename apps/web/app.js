@@ -32,6 +32,8 @@ import {
   inches,
   unitCounts,
   stripSvg,
+  tileSvg,
+  describeTiles,
 } from '../../packages/pattern-core/src/index.js';
 
 import {
@@ -52,7 +54,7 @@ const esc = (s) =>
 
 /* ------------------------------------------------------------------ state */
 
-const REMEMBERED = ['seam', 'trim', 'blockSize', 'method', 'corners', 'colorway'];
+const REMEMBERED = ['seam', 'trim', 'blockSize', 'method', 'corners', 'colorway', 'paper'];
 
 const state = {
   seam: 'scant-quarter',
@@ -61,6 +63,7 @@ const state = {
   corners: 'flip',
   colorway: 'original',
   method: 'patchwork',
+  paper: 'letter',
   view: 'home',
   blockId: 'teapot',
   preview: 'block',
@@ -955,7 +958,51 @@ function renderPrint() {
     <div style="max-width:460px">${p.coloring({ scale: 1.8 })}</div>
 
     <p style="font-size:.78rem;margin-top:24px">Print at 100% &mdash; no "fit to page". Measure the
-      1" square above with a ruler before cutting anything.</p>`;
+      1" square above with a ruler before cutting anything.</p>
+
+    ${fullSizeSection(p, f)}`;
+}
+
+/**
+ * The full-size pages: the block itself as a placement guide, or each
+ * foundation section, tiled across as many sheets as it takes with
+ * registration marks to tape them back together.
+ */
+function fullSizeSection(p, f) {
+  $('#print-paper').value = state.paper;
+  const sets = f
+    ? f.sections.map((s) => ({ title: `${p.def.name}, section ${s.id}`, svg: f.templateSvg(s, { scale: 1 }) }))
+    : [{ title: `${p.def.name}, full size`, svg: p.svg({ scale: 1 }) }];
+  const tiled = sets.map((s) => ({ ...s, ...tileSvg(s.svg, { paper: state.paper, title: s.title }) }));
+  const sheets = tiled.reduce((n, t) => n + t.plan.count, 0);
+
+  setPageSize(state.paper);
+  return `
+    <div class="page-break"></div>
+    <h2 style="margin-top:22px;font-size:1.3rem">${f ? 'Foundation templates' : 'Full-size block'} &mdash; print at 100%</h2>
+    <p style="font-size:.85rem">${sheets} sheet${sheets === 1 ? '' : 's'} of ${esc(tiled[0].plan.paper.name)}.
+      ${f ? 'Each section is mirrored, so you sew on the printed side.' : 'Use it to check a finished block, or to lay the pieces out before you sew.'}
+      Where a drawing runs onto more than one page, trim the dashed edge, lay it over its neighbour so the
+      &oplus; marks sit on top of each other, and tape. Check the 1-inch ruler on every page before you trust it.</p>
+    ${tiled
+      .map(
+        (t) => `<p class="num tile-caption">${esc(t.title)}: ${esc(describeTiles(t.plan))}</p>
+        <div class="tiles">${t.pages.map((pg) => `<div class="tile ${t.plan.orientation}">${pg.svg}</div>`).join('')}</div>`,
+      )
+      .join('')}`;
+}
+
+/** The sheet size has to be in an @page rule; a named page carries the landscape sheets. */
+function setPageSize(paper) {
+  const size = { letter: 'letter', a4: 'A4', legal: 'legal', tabloid: '11in 17in' }[paper] ?? 'letter';
+  const land = { letter: 'letter landscape', a4: 'A4 landscape', legal: 'legal landscape', tabloid: '17in 11in' }[paper] ?? 'letter landscape';
+  let el = document.getElementById('qb-page-size');
+  if (!el) {
+    el = document.createElement('style');
+    el.id = 'qb-page-size';
+    document.head.appendChild(el);
+  }
+  el.textContent = `@page { size: ${size}; margin: 0.5in; } @page tile-landscape { size: ${land}; margin: 0.5in; }`;
 }
 
 function renderHexPrint(def) {
@@ -1070,6 +1117,7 @@ $('#hex-back').onclick = () => { location.hash = 'patterns'; };
 $('#checkout-back').onclick = () => history.back();
 $('#print-back').onclick = () => { location.hash = `pattern/${state.blockId}`; };
 $('#do-print').onclick = () => window.print();
+$('#print-paper').onchange = (e) => { state.paper = e.target.value; remember(); renderPrint(); };
 
 for (const m of ['block', 'exploded', 'press', 'quilt', 'coloring']) {
   $(`#mode-${m}`).onclick = () => { state.preview = m; renderDetail(); };

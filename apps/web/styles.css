@@ -434,3 +434,16 @@ table.spec td.qty { white-space: nowrap; }
 @media print {
   .planner, .buy { display: none !important; }
 }
+
+/* ---- full-size tiled pages ---------------------------------------------- */
+.paper-pick { display: inline-flex; gap: 8px; align-items: center; font-size: .9rem; }
+.tile-caption { font-size: .8rem; margin: 14px 0 6px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+.tile { border: 1px solid #ddd; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+@media screen { .tile svg { display: block; width: 100%; height: auto; } }
+@media print {
+  .tiles { display: block; }
+  .tile { break-before: page; border: 0; box-shadow: none; }
+  .tile.landscape { page: tile-landscape; }
+  .tile svg { display: block; }
+}

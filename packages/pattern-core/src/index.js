@@ -27,6 +27,7 @@ export * from './tiers.js';
 export * from './colorways.js';
 export * from './quilt.js';
 export * from './hexagons.js';
+export * from './tiles.js';
 
 import { buildBlock, mirrorDef, validSizes, DEFAULT_CORNERS } from './block.js';
 import { planAssembly, seamStats } from './assembly.js';

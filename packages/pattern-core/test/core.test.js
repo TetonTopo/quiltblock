@@ -23,6 +23,7 @@ import {
   planHexagons, hexagonsSvg, hexTemplateSvg,
 } from '../src/index.js';
 import { checkDraft, toDefinition } from '../../../netlify/lib/draft.js';
+import { tilePlan, tileSvg, registrationMarks, describeTiles, PAPERS } from '../src/tiles.js';
 
 const results = [];
 let current = null;
@@ -723,6 +724,59 @@ test('toDefinition cleans up whatever the model sends', () => {
   eq(def.accent, 'o', 'accent is cut to one letter');
   ok(def.custom && def.id.startsWith('custom-'), 'marked custom with a fresh id');
   eq(toDefinition({}).rows, [], 'an empty draft gives an empty grid, not a crash');
+});
+
+// ---------------------------------------------------------------- tiles ----
+
+test('full-size printing picks the fewest sheets', () => {
+  eq(tilePlan(inches(6), inches(6)).count, 1, 'a 6" block fits on one letter page');
+  const twelve = tilePlan(inches(12), inches(12));
+  eq([twelve.cols, twelve.rows, twelve.orientation], [2, 2, 'portrait'], 'a 12" block is 2 × 2 letter pages');
+  eq(tilePlan(inches(16), inches(16)).count, 6, 'a 16" block is six letter pages');
+  const tab = tilePlan(inches(16), inches(16), { paper: 'tabloid' });
+  eq([tab.count, tab.orientation], [2, 'landscape'], 'or two tabloid pages turned sideways');
+  eq(tilePlan(inches(12), inches(12), { orientation: 'landscape' }).orientation, 'landscape', 'orientation can be forced');
+  ok(PAPERS.a4.w < PAPERS.letter.w && PAPERS.a4.h > PAPERS.letter.h, 'A4 is narrower and taller than letter');
+});
+
+test('tiles cover the drawing with exactly the overlap between neighbours', () => {
+  for (const [w, h, paper] of [[inches(16), inches(16), 'letter'], [inches(24), inches(18), 'a4'], [inches(40), inches(9), 'letter']]) {
+    const t = tilePlan(w, h, { paper });
+    const byId = Object.fromEntries(t.pages.map((p) => [p.id, p]));
+    for (const p of t.pages) {
+      ok(p.w > t.overlap && p.h > t.overlap, `${p.id} shows more than the overlap`);
+      ok(p.x + p.w <= w && p.y + p.h <= h, `${p.id} stays inside the drawing`);
+      if (p.right) eq(p.x + p.w - byId[p.right].x, t.overlap, `${p.id} overlaps ${p.right} by the overlap`);
+      if (p.below) eq(p.y + p.h - byId[p.below].y, t.overlap, `${p.id} overlaps ${p.below} by the overlap`);
+    }
+    const last = t.pages[t.pages.length - 1];
+    eq([last.x + last.w, last.y + last.h], [w, h], 'the last page reaches the far corner');
+    eq(t.pages[0].id, 'A1', 'pages are named like a map');
+  }
+});
+
+test('every registration mark prints on both pages that share it', () => {
+  const t = tilePlan(inches(16), inches(16));
+  const marks = registrationMarks(t);
+  ok(marks.length > 0, 'there are marks');
+  for (const m of marks) {
+    const on = t.pages.filter((p) => m.x >= p.x && m.x <= p.x + p.w && m.y >= p.y && m.y <= p.y + p.h);
+    ok(on.length >= 2, `mark at ${m.x},${m.y} is on ${on.length} pages`);
+  }
+  eq(registrationMarks(tilePlan(inches(6), inches(6))), [], 'a one-page drawing needs none');
+});
+
+test('tiled pages print at real size with names, ruler and neighbours', () => {
+  const p = makePattern(byId('maple-leaf'), { blockSize: 18 });
+  const { plan, pages } = tileSvg(p.svg({ scale: 1 }), { title: 'Maple leaf' });
+  eq(pages.length, plan.count, 'one SVG per page');
+  ok(pages[0].svg.includes('width="7.5in"') && pages[0].svg.includes('height="10in"'), 'sized in inches to the printable area');
+  ok(pages[0].svg.includes('Start here'), 'A1 says it is the first page');
+  ok(pages[1].svg.includes('A1 on the left'), 'A2 says to lay it over A1');
+  ok(pages.every((pg) => pg.svg.includes('1 inch')), 'every page has a ruler');
+  ok(pages[1].svg.includes(`viewBox="${plan.pages[1].x} 0 `), 'A2 shows the drawing from its own offset');
+  ok(/pages? \(\d across × \d down\), US Letter/.test(describeTiles(plan)), describeTiles(plan));
+  throws(() => tileSvg('<svg></svg>'), 'viewBox', 'a drawing without a viewBox is refused');
 });
 
 // ------------------------------------------------------------------ run ----
