@@ -1,0 +1,63 @@
+[
+ {
+  "id": "doodle-doo-chicken",
+  "name": "Doodle-Doo chicken",
+  "subject": "Animals",
+  "source": "Part9: Doodle-Doo, Palmer Bixler (Annie's)",
+  "fabrics": {
+   "k": {
+    "name": "White",
+    "hex": "#FAF8F2"
+   },
+   "p": {
+    "name": "Pink crown",
+    "hex": "#E2676E"
+   },
+   "g": {
+    "name": "Gray beak",
+    "hex": "#9C9A92"
+   },
+   "j": {
+    "name": "Yellow head",
+    "hex": "#F2B23E"
+   },
+   "y": {
+    "name": "Pale yellow body",
+    "hex": "#F7DE6B"
+   },
+   "m": {
+    "name": "Orange wing",
+    "hex": "#F1A64A"
+   },
+   "h": {
+    "name": "Multicolor wing",
+    "hex": "#D9DDB7"
+   },
+   "o": {
+    "name": "Yellow tail",
+    "hex": "#F0A030"
+   },
+   "t": {
+    "name": "Roost strip",
+    "hex": "#D8E2C8"
+   }
+  },
+  "accent": "j",
+  "background": "k",
+  "blockSize": 12,
+  "rows": [
+   "k k k   k   k k k k k k k   k",
+   "k k k\\p k\\p k k k k k k k   k",
+   "k k/g j   j   k\\j . k k k k k/j k",
+   "k g\\k j   j   .   . k k k k k   k",
+   "k k y   y   y   y y y y y y   k",
+   "k k y   y   y   y y y y y y   k",
+   "k k m   m   m   h h h m\\h m m k",
+   "k k m   m   m   h h h h/m m m k",
+   "k k o\\k .   o   o o o o o/k . k",
+   "k k .   .   o   o o o o .   . k",
+   "t t t   t   t   t t t t t   t t",
+   "t t t   t   t   t t t t t   t t"
+  ]
+ }
+]
