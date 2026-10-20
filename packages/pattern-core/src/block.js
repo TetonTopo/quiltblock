@@ -49,7 +49,7 @@
  * how rail fence and most big sampler blocks are actually sewn.
  */
 
-import { inches, label } from './units.js';
+import { inches, label, fmt } from './units.js';
 import { repairForGuillotine } from './partition.js';
 
 export const HST_DIRS = ['/', '\\'];
@@ -250,9 +250,6 @@ export function buildBlock(def, { blockSize = 12, repair = true, corners = DEFAU
       throw new PatternError(`row ${r + 1} has ${grid[r].length} cells, expected ${cols}`, def.id);
     }
   }
-  if (rows !== cols) {
-    throw new PatternError(`block grid is ${cols}x${rows}; blocks must be square`, def.id);
-  }
 
   const blockSixteenths = inches(blockSize);
   if (blockSixteenths % cols !== 0) {
@@ -262,10 +259,13 @@ export function buildBlock(def, { blockSize = 12, repair = true, corners = DEFAU
       def.id,
     );
   }
+  // Cells are always square. A grid with more rows than columns is a block
+  // taller than it is wide: blockSize is its width and the height follows.
   const cell = blockSixteenths / cols;
+  const height = cell * rows;
 
   const subgrid = Number(def.subgrid) || 1;
-  if (subgrid > 1 && cols % subgrid !== 0) {
+  if (subgrid > 1 && (cols % subgrid !== 0 || rows % subgrid !== 0)) {
     throw new PatternError(`a ${cols}-cell grid does not split into ${subgrid} sub-blocks`, def.id);
   }
   const subOf = (r, c) => `${Math.floor((r * subgrid) / rows)},${Math.floor((c * subgrid) / cols)}`;
@@ -512,10 +512,16 @@ export function buildBlock(def, { blockSize = 12, repair = true, corners = DEFAU
     ...def,
     grid,
     gridSize: cols,
+    gridRows: rows,
     subgrid,
     blockSize,
     cell,
+    /** Width; the same as height for a square block. */
     size: blockSixteenths,
+    width: blockSixteenths,
+    height,
+    square: rows === cols,
+    sizeLabel: rows === cols ? fmt(blockSixteenths) : `${fmt(blockSixteenths).replace('"', '')} × ${fmt(height)}`,
     corners,
     units: finalUnits,
     merges: repaired.splits,
@@ -546,9 +552,10 @@ export function mirrorDef(def) {
   const swap = { '/': '\\', '\\': '/', '<': '>', '>': '<' };
   // Parse first, so every "." is known to belong to a particular unit, then
   // re-emit the grid with each unit's origin moved to its mirrored column.
-  const built = buildBlock(def, { blockSize: def.rows.length, repair: false, corners: 'hst' });
+  const across = String(def.rows[0]).trim().split(/\s+/).length;
+  const built = buildBlock(def, { blockSize: across, repair: false, corners: 'hst' });
   const n = built.gridSize;
-  const grid = Array.from({ length: n }, () => Array(n).fill('.'));
+  const grid = Array.from({ length: built.gridRows }, () => Array(n).fill('.'));
   for (const u of built.units) {
     const { r, c, w, h } = u.cells;
     const mc = n - c - w;

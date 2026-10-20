@@ -53,7 +53,7 @@ export function validateBlock(block, { seam, trim, limits = {} } = {}) {
 
   // --- the pieces must exactly fill the block ------------------------------
   const area = block.pieces.reduce((sum, p) => sum + polygonArea(p.polygon), 0);
-  const expected = block.size * block.size;
+  const expected = block.width * block.height;
   if (Math.abs(area - expected) > 1) {
     errors.push({
       rule: 'covers-block',

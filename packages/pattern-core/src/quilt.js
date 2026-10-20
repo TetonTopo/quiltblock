@@ -62,6 +62,56 @@ export const DEFAULT_EXTRAS = {
   binding: { name: 'Binding - charcoal', hex: '#2B2622' },
 };
 
+/**
+ * Colours for a stack of borders when nobody chose them: the pirate quilt in
+ * the pile runs background, accent, print, background, then a wide outer one.
+ */
+const BORDER_HUES = ['#CFE04A', '#2F4A7A', '#D9A63A', '#F4F1EA', '#B8453A', '#EFEAE0'];
+
+/**
+ * The borders, innermost first, as `{ id, width, label }`. Either the old pair
+ * (`innerBorder`, `outerBorder`, ids 'inner' and 'outer') or a `borders` list
+ * of widths or `{ width, fabric }`, any length, ids 'border1', 'border2'...
+ */
+function borderList({ borders, innerBorder = 0, outerBorder = 0 }) {
+  if (Array.isArray(borders)) {
+    const list = borders
+      .map((b) => (typeof b === 'number' ? { width: b } : b))
+      .filter((b) => b && b.width > 0);
+    return list.map((b, i) => ({
+      id: `border${i + 1}`,
+      width: inches(b.width),
+      fabric: b.fabric,
+      label: list.length === 1 ? 'Border' : i === list.length - 1 ? `Outer border (${i + 1} of ${list.length})` : `Border ${i + 1} of ${list.length}`,
+      hue: BORDER_HUES[i % BORDER_HUES.length],
+    }));
+  }
+  const out = [];
+  if (innerBorder > 0) out.push({ id: 'inner', width: inches(innerBorder), label: 'Inner border' });
+  if (outerBorder > 0) out.push({ id: 'outer', width: inches(outerBorder), label: 'Outer border' });
+  return out;
+}
+
+/**
+ * Fold one set of cut groups into another. `rename` maps a fabric key in
+ * `from` to the key it is charged to in `into`.
+ */
+function mergeGroups(into, from, rename = (k) => k) {
+  for (const [key, entries] of from) {
+    const target = rename(key);
+    if (!into.has(target)) into.set(target, new Map());
+    const dest = into.get(target);
+    for (const [ek, e] of entries) {
+      if (dest.has(ek)) {
+        const cur = dest.get(ek);
+        cur.qty += e.qty;
+        cur.units += e.units;
+        cur.labels.push(...e.labels);
+      } else dest.set(ek, e);
+    }
+  }
+}
+
 /** The fabric that covers the most area in the block: the background. */
 export function backgroundOf(block) {
   const area = new Map();
@@ -98,6 +148,10 @@ function spread(total, n, unit = 4) {
  *   sashing           strip width in inches (sashed settings)
  *   innerBorder       width in inches, 0 for none
  *   outerBorder       width in inches, 0 for none
+ *   borders           instead of inner/outer: a list of widths (or { width,
+ *                     fabric }), innermost first, as many as the quilt has
+ *   alternateWith     a second built block, the same size, for the
+ *                     'alternate' setting to use instead of plain squares
  *   mirror            flip every other block left to right
  *   rainbow           rotate the background fabric through RAINBOW, block by block
  *   piecedBorder      set small copies of the block into the outer border
@@ -110,11 +164,10 @@ export function planQuilt(block, opts = {}) {
     rows = 3,
     setting = 'straight',
     sashing = 2,
-    innerBorder = 0,
-    outerBorder = 0,
     mirror = false,
     rainbow = false,
     piecedBorder = false,
+    alternateWith = null,
     fabrics = {},
     seam,
     trim,
@@ -123,13 +176,22 @@ export function planQuilt(block, opts = {}) {
   const math = seamMath(seam, trim);
   const a = math.allowance;
 
-  const B = block.size;
+  // Blocks may be taller than they are wide; every cell of the layout is BW × BH.
+  const BW = block.width ?? block.size;
+  const BH = block.height ?? block.size;
+  const alt = setting === 'alternate' ? alternateWith : null;
+  if (alt && (alt.width !== BW || alt.height !== BH)) {
+    throw new RangeError(`the alternate block is ${alt.sizeLabel}, but ${block.name} is ${block.sizeLabel}; they must match`);
+  }
   const sashed = setting === 'sashed' || setting === 'cornerstones';
   const S = sashed ? inches(sashing) : 0;
-  const IB = inches(innerBorder);
-  const OB = inches(outerBorder);
+  const blist = borderList(opts);
 
   const extras = { ...DEFAULT_EXTRAS };
+  for (const b of blist) {
+    if (!extras[b.id]) extras[b.id] = { name: `${b.label} - solid`, hex: b.hue };
+    if (b.fabric && !fabrics[b.id]) fabrics[b.id] = b.fabric;
+  }
   for (const k of Object.keys(extras)) {
     const f = fabrics[k];
     if (!f) continue;
@@ -137,10 +199,10 @@ export function planQuilt(block, opts = {}) {
   }
 
   // --- the centre ----------------------------------------------------------
-  const centreW = cols * B + (sashed ? (cols + 1) * S : 0);
-  const centreH = rows * B + (sashed ? (rows + 1) * S : 0);
+  const centreW = cols * BW + (sashed ? (cols + 1) * S : 0);
+  const centreH = rows * BH + (sashed ? (rows + 1) * S : 0);
   const cells = [];
-  const counts = { pieced: 0, mirrored: 0, plain: 0, cornerstones: 0, sashes: 0, minis: 0 };
+  const counts = { pieced: 0, mirrored: 0, plain: 0, alternate: 0, cornerstones: 0, sashes: 0, minis: 0 };
 
   const mirrored = mirror ? buildBlock(mirrorDef(block), { blockSize: block.blockSize, corners: block.corners }) : null;
   const bg = backgroundOf(block);
@@ -148,17 +210,22 @@ export function planQuilt(block, opts = {}) {
   let index = 0;
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      const x = sashed ? S + c * (B + S) : c * B;
-      const y = sashed ? S + r * (B + S) : r * B;
+      const x = sashed ? S + c * (BW + S) : c * BW;
+      const y = sashed ? S + r * (BH + S) : r * BH;
       const plain = setting === 'alternate' && (r + c) % 2 === 1;
+      if (plain && alt) {
+        cells.push({ type: 'block', x, y, w: BW, h: BH, alternate: true, block: alt });
+        counts.alternate++;
+        continue;
+      }
       if (plain) {
-        cells.push({ type: 'plain', x, y, w: B, h: B, fabric: 'plain' });
+        cells.push({ type: 'plain', x, y, w: BW, h: BH, fabric: 'plain' });
         counts.plain++;
         continue;
       }
       const flip = mirror && index % 2 === 1;
       const palette = rainbow && bg ? { [bg]: { ...block.fabrics[bg], hex: RAINBOW[index % RAINBOW.length] } } : null;
-      cells.push({ type: 'block', x, y, w: B, h: B, index, mirrored: flip, block: flip ? mirrored : block, palette });
+      cells.push({ type: 'block', x, y, w: BW, h: BH, index, mirrored: flip, block: flip ? mirrored : block, palette });
       counts.pieced++;
       if (flip) counts.mirrored++;
       index++;
@@ -169,7 +236,7 @@ export function planQuilt(block, opts = {}) {
     // Vertical sashes: one left of every block plus one at the row's end.
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c <= cols; c++) {
-        cells.push({ type: 'sash', x: c * (B + S), y: S + r * (B + S), w: S, h: B, fabric: 'sashing' });
+        cells.push({ type: 'sash', dir: 'v', x: c * (BW + S), y: S + r * (BH + S), w: S, h: BH, fabric: 'sashing' });
         counts.sashes++;
       }
     }
@@ -177,24 +244,28 @@ export function planQuilt(block, opts = {}) {
     for (let r = 0; r <= rows; r++) {
       if (setting === 'cornerstones') {
         for (let c = 0; c < cols; c++) {
-          cells.push({ type: 'sash', x: S + c * (B + S), y: r * (B + S), w: B, h: S, fabric: 'sashing' });
+          cells.push({ type: 'sash', dir: 'h', x: S + c * (BW + S), y: r * (BH + S), w: BW, h: S, fabric: 'sashing' });
           counts.sashes++;
         }
         for (let c = 0; c <= cols; c++) {
-          cells.push({ type: 'stone', x: c * (B + S), y: r * (B + S), w: S, h: S, fabric: 'cornerstone' });
+          cells.push({ type: 'stone', x: c * (BW + S), y: r * (BH + S), w: S, h: S, fabric: 'cornerstone' });
           counts.cornerstones++;
         }
       } else {
-        cells.push({ type: 'sash', x: 0, y: r * (B + S), w: centreW, h: S, fabric: 'sashing', long: true });
+        cells.push({ type: 'sash', dir: 'h', x: 0, y: r * (BH + S), w: centreW, h: S, fabric: 'sashing', long: true });
       }
     }
   }
 
   // --- a pieced outer border sets small copies of the block into it, and is
   // exactly one small block wide so nothing needs padding ---------------------
+  // The pieced border is always the outermost one, and only square blocks can
+  // run along all four sides without turning on end.
+  const outermost = blist[blist.length - 1];
+  const OB = outermost?.width ?? 0;
   let OBw = OB;
   let mini = null;
-  if (piecedBorder && OB) {
+  if (piecedBorder && OB && block.square !== false) {
     const sizes = validSizes(block.gridSize, [2, 3, 4, 5, 6, 8, 9, 10, 12]).filter((s) => inches(s) <= OB);
     const miniInches = sizes.length ? sizes[sizes.length - 1] : null;
     if (miniInches) {
@@ -223,9 +294,13 @@ export function planQuilt(block, opts = {}) {
     W += 2 * width;
     H += 2 * width;
   };
-  addBorder('inner', IB);
-  const innerEdge = { w: W, h: H };
-  addBorder('outer', OBw);
+  let innerEdge = { w: W, h: H };
+  blist.forEach((b, i) => {
+    if (i === blist.length - 1) {
+      innerEdge = { w: W, h: H };
+      addBorder(b.id, OBw);
+    } else addBorder(b.id, b.width);
+  });
 
   // Shift everything so the top-left of the finished quilt is the origin.
   const ox = -x0;
@@ -238,7 +313,7 @@ export function planQuilt(block, opts = {}) {
     const mb = mini.block;
     const mm = mini.mirrored;
     for (const side of ['top', 'bottom', 'left', 'right']) {
-      const b = borders.find((x) => x.which === 'outer' && x.side === side);
+      const b = borders.find((x) => x.which === outermost.id && x.side === side);
       const horizontal = side === 'top' || side === 'bottom';
       // Blocks run along the centre's edge only; the four corners stay plain.
       const len = horizontal ? innerEdge.w : innerEdge.h;
@@ -289,39 +364,47 @@ export function planQuilt(block, opts = {}) {
     // so their background cuts are charged to the outer border.
     const tmp = newGroups();
     addBlockCuts(tmp, mini.block, math, counts.minis, { forLabel: 'border blocks' });
-    for (const [key, entries] of tmp) {
-      const target = key === bg ? 'outer' : key;
-      if (!groups.has(target)) groups.set(target, new Map());
-      const into = groups.get(target);
-      for (const [ek, e] of entries) {
-        if (into.has(ek)) {
-          const cur = into.get(ek);
-          cur.qty += e.qty;
-          cur.units += e.units;
-          cur.labels.push(...e.labels);
-        } else into.set(ek, e);
-      }
+    mergeGroups(groups, tmp, (key) => (key === bg ? outermost.id : key));
+    for (const c of miniCells) c.palette = bg ? { [bg]: { ...extras[outermost.id] } } : null;
+  }
+  if (alt && counts.alternate) {
+    // The second block brings its own fabrics. A letter it shares with the
+    // main block and the same colour is the same fabric; a letter that means
+    // something else gets a line of its own.
+    const tmp = newGroups();
+    addBlockCuts(tmp, alt, math, counts.alternate, { forLabel: `${alt.name} blocks` });
+    const same = (k) => block.fabrics[k] && block.fabrics[k].hex === alt.fabrics[k]?.hex;
+    mergeGroups(groups, tmp, (k) => (same(k) || !block.fabrics[k] ? k : `alt-${k}`));
+    for (const k of Object.keys(alt.fabrics)) {
+      if (!same(k) && block.fabrics[k]) fabricsMap[`alt-${k}`] = alt.fabrics[k];
+      else if (!block.fabrics[k]) fabricsMap[k] = alt.fabrics[k];
     }
-    for (const c of miniCells) c.palette = bg ? { [bg]: { ...extras.outer } } : null;
   }
 
   const sashCut = (w, h) => ({ w: w + 2 * a, h: h + 2 * a });
   if (sashed) {
-    const vert = cells.filter((c) => c.type === 'sash' && !c.long && c.h === B).length;
-    const horiz = cells.filter((c) => c.type === 'sash' && !c.long && c.w === B).length;
+    const vert = cells.filter((c) => c.type === 'sash' && !c.long && c.dir === 'v').length;
+    const horiz = cells.filter((c) => c.type === 'sash' && !c.long && c.dir === 'h').length;
     const long = cells.filter((c) => c.type === 'sash' && c.long).length;
-    if (vert + horiz) addPlainCut(groups, 'sashing', { ...sashCut(S, B), qty: vert + horiz, purpose: 'sashing strips between blocks' });
+    if (BW === BH) {
+      if (vert + horiz) addPlainCut(groups, 'sashing', { ...sashCut(S, BH), qty: vert + horiz, purpose: 'sashing strips between blocks' });
+    } else {
+      if (vert) addPlainCut(groups, 'sashing', { ...sashCut(S, BH), qty: vert, purpose: 'sashing strips between blocks' });
+      if (horiz) addPlainCut(groups, 'sashing', { ...sashCut(BW, S), qty: horiz, purpose: 'sashing strips above and below blocks' });
+    }
     if (long) addPlainCut(groups, 'sashing', { ...sashCut(centreW, S), qty: long, purpose: 'sashing rows, full width' });
     if (counts.cornerstones) addPlainCut(groups, 'cornerstone', { ...sashCut(S, S), qty: counts.cornerstones, purpose: 'cornerstones' });
   }
-  if (counts.plain) addPlainCut(groups, 'plain', { ...sashCut(B, B), qty: counts.plain, purpose: 'plain alternate squares' });
-  for (const which of ['inner', 'outer']) {
+  if (counts.plain) {
+    addPlainCut(groups, 'plain', { ...sashCut(BW, BH), qty: counts.plain, purpose: BW === BH ? 'plain alternate squares' : 'plain alternate rectangles' });
+  }
+  for (const { id: which, label } of blist) {
     const bs = borders.filter((b) => b.which === which);
     if (!bs.length) continue;
     const sides = bs.filter((b) => b.side === 'left' || b.side === 'right');
     const tops = bs.filter((b) => b.side === 'top' || b.side === 'bottom');
     const width = sides[0].w;
-    if (which === 'outer' && mini) {
+    if (which === outermost.id && mini) {
       // Spacer rectangles between the set-in blocks, plus four plain corners.
       const spacers = new Map();
       for (const b of bs) for (const g of b.spacers) spacers.set(g, (spacers.get(g) ?? 0) + 1);
@@ -330,8 +413,8 @@ export function planQuilt(block, opts = {}) {
       }
       addPlainCut(groups, which, { ...sashCut(width, width), qty: 4, purpose: 'outer border corners' });
     } else {
-      addPlainCut(groups, which, { ...sashCut(width, sides[0].h), qty: 2, purpose: `${which} border, sides` });
-      addPlainCut(groups, which, { ...sashCut(tops[0].w, width), qty: 2, purpose: `${which} border, top and bottom` });
+      addPlainCut(groups, which, { ...sashCut(width, sides[0].h), qty: 2, purpose: `${label.toLowerCase()}, sides` });
+      addPlainCut(groups, which, { ...sashCut(tops[0].w, width), qty: 2, purpose: `${label.toLowerCase()}, top and bottom` });
     }
   }
 
@@ -374,24 +457,32 @@ export function planQuilt(block, opts = {}) {
     `Make ${counts.pieced} ${block.name} block${counts.pieced === 1 ? '' : 's'}` +
       (counts.mirrored ? `, ${counts.mirrored} of them mirrored` : '') +
       (rainbow ? ', rotating the background fabric through the rainbow in reading order' : '') +
-      '. Square each one up to ' + fmt(B + 2 * a) + ' before you lay anything out.',
+      '. Square each one up to ' + fmtSize(BW + 2 * a, BH + 2 * a).replace(/^(.+) × \1$/, '$1') + ' before you lay anything out.',
   );
+  if (alt) {
+    steps.push(
+      `Make ${counts.alternate} ${alt.name} block${counts.alternate === 1 ? '' : 's'} for the alternate positions, squared up the same way.`,
+    );
+  }
+  const blockDims = BW === BH ? fmt(BW) : fmtSize(BW, BH);
   if (setting === 'straight') {
     steps.push(`Lay the blocks out in ${rows} rows of ${cols}. Sew each row, pressing the seams of odd rows one way and even rows the other so they nest. Join the rows.`);
+  } else if (setting === 'alternate' && alt) {
+    steps.push(`Lay out ${rows} rows of ${cols}, alternating ${block.name} and ${alt.name} blocks, checkerboard fashion. Sew each row, pressing the row seams in alternate directions so they nest. Join the rows.`);
   } else if (setting === 'alternate') {
-    steps.push(`Lay out ${rows} rows of ${cols}, alternating a pieced block and a plain ${fmt(B)} square, checkerboard fashion. Sew each row, pressing toward the plain squares. Join the rows; the seams nest.`);
+    steps.push(`Lay out ${rows} rows of ${cols}, alternating a pieced block and a plain ${blockDims} ${BW === BH ? 'square' : 'rectangle'}, checkerboard fashion. Sew each row, pressing toward the plain ${BW === BH ? 'squares' : 'rectangles'}. Join the rows; the seams nest.`);
   } else if (setting === 'sashed') {
-    steps.push(`Sew a ${fmt(S)} × ${fmt(B)} sashing strip to the right of every block, and one to the left of the first block in each row. Press toward the sashing. Make ${rows} block rows.`);
+    steps.push(`Sew a ${fmt(S)} × ${fmt(BH)} sashing strip to the right of every block, and one to the left of the first block in each row. Press toward the sashing. Make ${rows} block rows.`);
     steps.push(`Sew a full-width sashing strip to the top of each row, and one to the bottom of the last row. Press toward the sashing. Join the rows, matching the vertical sashes.`);
   } else {
-    steps.push(`Sew a ${fmt(S)} × ${fmt(B)} sashing strip to the right of every block, and one to the left of the first block in each row. Press toward the sashing. Make ${rows} block rows.`);
-    steps.push(`Make ${rows + 1} sashing rows: a cornerstone, a sashing strip, a cornerstone, and so on, ${cols} strips and ${cols + 1} cornerstones each. Press toward the sashing. Join block rows and sashing rows alternately, matching the cornerstones to the vertical sashes.`);
+    steps.push(`Sew a ${fmt(S)} × ${fmt(BH)} sashing strip to the right of every block, and one to the left of the first block in each row. Press toward the sashing. Make ${rows} block rows.`);
+    steps.push(`Make ${rows + 1} sashing rows: a cornerstone, a ${fmt(BW)} sashing strip, a cornerstone, and so on, ${cols} strips and ${cols + 1} cornerstones each. Press toward the sashing. Join block rows and sashing rows alternately, matching the cornerstones to the vertical sashes.`);
   }
-  for (const which of ['inner', 'outer']) {
+  for (const { id: which, label } of blist) {
     const bs = borders.filter((b) => b.which === which);
     if (!bs.length) continue;
     const width = bs[0].w;
-    if (which === 'outer' && mini) {
+    if (which === outermost.id && mini) {
       steps.push(
         `Make the pieced outer border: sew the ${fmt(mini.size)} border blocks and the spacer rectangles into four strips as shown in the layout, ` +
           `${bs.find((b) => b.side === 'top').minis} across the top and bottom and ${bs.find((b) => b.side === 'left').minis} down each side. Add a corner square to each end of the top and bottom strips.`,
@@ -400,7 +491,7 @@ export function planQuilt(block, opts = {}) {
       continue;
     }
     steps.push(
-      `${which === 'inner' ? 'Inner' : 'Outer'} border, ${fmt(width)} finished: measure the quilt through the middle top to bottom, cut the two side strips to that length, pin at the centre and ends, sew, press toward the border. ` +
+      `${label}, ${fmt(width)} finished: measure the quilt through the middle top to bottom, cut the two side strips to that length, pin at the centre and ends, sew, press toward the border. ` +
         `Then measure across the middle and do the same for the top and bottom.`,
     );
   }
@@ -421,10 +512,15 @@ export function planQuilt(block, opts = {}) {
     block,
     mirroredBlock: mirrored,
     mini,
-    size: B,
+    alternateBlock: alt,
+    size: BW,
+    blockW: BW,
+    blockH: BH,
     sashing: S,
-    innerBorder: IB,
-    outerBorder: OBw,
+    // The old pair, for callers that only know two borders.
+    innerBorder: blist.length > 1 ? blist[0].width : 0,
+    outerBorder: blist.length ? OBw : 0,
+    borderList: blist.map((b, i) => ({ ...b, width: i === blist.length - 1 ? OBw : b.width })),
     centre: { w: centreW, h: centreH },
     width: W,
     height: H,
@@ -461,13 +557,16 @@ function nearestSize(W, H) {
  * How many blocks fit a named quilt size, for the size presets. Returns the
  * cols/rows that land closest to the target without going over by much.
  */
-export function layoutFor(block, sizeId, { setting = 'straight', sashing = 2, innerBorder = 0, outerBorder = 0 } = {}) {
+export function layoutFor(block, sizeId, { setting = 'straight', sashing = 2, innerBorder = 0, outerBorder = 0, borders } = {}) {
   const target = QUILT_SIZES.find((s) => s.id === sizeId) ?? QUILT_SIZES[2];
-  const B = toInches(block.size);
+  const BW = toInches(block.width ?? block.size);
+  const BH = toInches(block.height ?? block.size);
   const S = setting === 'sashed' || setting === 'cornerstones' ? sashing : 0;
-  const frame = 2 * (innerBorder + outerBorder);
-  const fit = (total) => Math.max(1, Math.round((total - frame - S) / (B + S)));
-  return { cols: fit(target.w), rows: fit(target.h), target };
+  const frame = 2 * (Array.isArray(borders)
+    ? borders.reduce((s, b) => s + (typeof b === 'number' ? b : b?.width ?? 0), 0)
+    : innerBorder + outerBorder);
+  const fit = (total, B) => Math.max(1, Math.round((total - frame - S) / (B + S)));
+  return { cols: fit(target.w, BW), rows: fit(target.h, BH), target };
 }
 
 /** Which of a block's fabrics is lightest - a sensible default for sashing. */

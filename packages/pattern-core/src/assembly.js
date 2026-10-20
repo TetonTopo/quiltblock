@@ -44,7 +44,7 @@ function bulkPoints(block) {
   }
   const out = [];
   for (const v of counts.values()) {
-    const interior = v.x > 0 && v.y > 0 && v.x < block.size && v.y < block.size;
+    const interior = v.x > 0 && v.y > 0 && v.x < block.width && v.y < block.height;
     if (interior && v.pieces.size >= 4) {
       out.push({ x: v.x, y: v.y, count: v.pieces.size, pieces: [...v.pieces].sort() });
     }
@@ -214,7 +214,7 @@ function unitSignature(u) {
  * difficulty read.
  */
 export function planAssembly(block, { seam, trim } = {}) {
-  const region = { x0: 0, y0: 0, x1: block.size, y1: block.size };
+  const region = { x0: 0, y0: 0, x1: block.width, y1: block.height };
   const tree = decompose(block.units, region);
   const seams = [];
   collectSeams(block, tree, seams);

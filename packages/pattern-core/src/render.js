@@ -58,10 +58,11 @@ export function blockSvg(block, opts = {}) {
   } = opts;
 
   const pal = palette ? { ...block.fabrics, ...palette } : block.fabrics;
-  const W = block.size * scale;
+  const W = block.width * scale;
+  const H = block.height * scale;
   const S = (n) => n * scale;
   const out = [
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${W}" role="img" aria-label="${esc(title)}">`,
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title)}">`,
   ];
 
   for (const p of block.pieces) {
@@ -166,8 +167,8 @@ export function explodedSvg(block, plan, opts = {}) {
   };
   walk(plan.tree, 0, 0);
 
-  const W = S(block.size + maxX);
-  const H = S(block.size + maxY);
+  const W = S(block.width + maxX);
+  const H = S(block.height + maxY);
   const out = [
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(block.name)}, exploded">`,
   ];
@@ -215,10 +216,11 @@ export function coloringSvg(block, opts = {}) {
  * correctly instead of showing the same block twelve times.
  */
 export function quiltSvg(block, { cols = 4, rows = 3, scale = 1, sashing = '#F4F1EA' } = {}) {
-  const W = block.size * scale;
-  const gap = Math.max(4, Math.round(block.size * scale * 0.03));
+  const W = block.width * scale;
+  const H = block.height * scale;
+  const gap = Math.max(4, Math.round(block.width * scale * 0.03));
   const totalW = cols * W + (cols + 1) * gap;
-  const totalH = rows * W + (rows + 1) * gap;
+  const totalH = rows * H + (rows + 1) * gap;
   const rotate = block.rotate || [];
 
   const out = [
@@ -237,7 +239,7 @@ export function quiltSvg(block, { cols = 4, rows = 3, scale = 1, sashing = '#F4F
       const inner = blockSvg(block, { scale, labels: false, palette: pal })
         .replace(/^<svg[^>]*>/, '')
         .replace(/<\/svg>$/, '');
-      out.push(`<g transform="translate(${gap + c * (W + gap)},${gap + r * (W + gap)})">${inner}</g>`);
+      out.push(`<g transform="translate(${gap + c * (W + gap)},${gap + r * (H + gap)})">${inner}</g>`);
     }
   }
 

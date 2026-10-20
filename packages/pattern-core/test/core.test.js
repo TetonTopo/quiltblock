@@ -233,7 +233,7 @@ test('bad definitions fail loudly instead of drawing something wrong', () => {
   const fabrics = { a: { name: 'A', hex: '#111111' } };
   throws(() => buildBlock({ id: 'x', fabrics, rows: ['a a', 'a'] }), 'expected 2', 'ragged rows');
   throws(() => buildBlock({ id: 'x', fabrics, rows: ['a a', 'a .'] }), 'stray', 'stray continuation');
-  throws(() => buildBlock({ id: 'x', fabrics, rows: ['a a', 'a a', 'a a'] }), 'square', 'not square');
+  throws(() => buildBlock({ id: 'x', fabrics, rows: ['a a', 'a a', 'a a'] }, { blockSize: 17 / 16 }), 'divide', 'a width the columns cannot share');
   throws(() => buildBlock({ id: 'x', fabrics, rows: ['a?a a', 'a a'] }), 'operator', 'unknown operator');
   throws(
     () => buildBlock({ id: 'x', fabrics: { a: fabrics.a }, rows: ['a z', 'a a'] }),
@@ -724,6 +724,79 @@ test('toDefinition cleans up whatever the model sends', () => {
   eq(def.accent, 'o', 'accent is cut to one letter');
   ok(def.custom && def.id.startsWith('custom-'), 'marked custom with a fresh id');
   eq(toDefinition({}).rows, [], 'an empty draft gives an empty grid, not a crash');
+});
+
+// ------------------------------------------------- rectangles and borders ----
+
+/** A 7 × 9 boat on 1" cells, the shape of the pirate quilt's boat blocks. */
+const BOAT = {
+  id: 'boat-test',
+  name: 'Boat',
+  fabrics: { k: { name: 'Sky', hex: '#EEF2F5' }, s: { name: 'Sail', hex: '#F4F1EA' }, h: { name: 'Hull', hex: '#6E4A32' }, w: { name: 'Water', hex: '#2F4A7A' } },
+  rows: [
+    'k k k k k k k',
+    'k k k k/s k k k',
+    'k k k/s s k k k',
+    'k k/s s s k k k',
+    'k s s s s k k',
+    'k k k k k k k',
+    'h\\k h h h h h h/k',
+    'w w w w w w w',
+    'w w w w w w w',
+  ],
+};
+
+test('a block can be taller than it is wide', () => {
+  const b = buildBlock(BOAT, { blockSize: 7 });
+  eq([b.width, b.height, b.square], [inches(7), inches(9), false], '7 × 9 finished');
+  eq(b.sizeLabel, '7 × 9"', 'labelled the way a pattern prints it');
+  const p = makePattern(BOAT, { blockSize: 7 });
+  eq(p.validation.errors, [], 'tiles its own area and passes the rules');
+  ok(p.plan.steps.length > 0, 'and has a sew order');
+  ok(p.svg().includes(`viewBox="0 0 ${inches(7) * 2} ${inches(9) * 2}"`), 'drawn at its own proportions');
+  const m = mirrorDef(BOAT);
+  eq(m.rows.length, 9, 'mirroring keeps all nine rows');
+  eq(buildBlock(m, { blockSize: 7 }).height, inches(9), 'and the height');
+});
+
+test('the planner lays out rectangular blocks with sashing and cornerstones', () => {
+  const b = buildBlock(BOAT, { blockSize: 7 });
+  const q = planQuilt(b, { cols: 4, rows: 3, setting: 'cornerstones', sashing: 3 });
+  eq([q.blockW, q.blockH], [inches(7), inches(9)], 'cells are 7 × 9');
+  eq(q.finished.label, '43" × 39"', '4 × 7 + 5 × 3 across, 3 × 9 + 4 × 3 down');
+  const sash = q.cutting.find((f) => f.fabric === 'sashing');
+  const cuts = sash.entries.map((e) => `${e.qty} ${e.cut}`);
+  ok(cuts.includes('15 3½" × 9½"'), `15 vertical sashes cut 3½ × 9½ (${cuts})`);
+  ok(cuts.includes('16 7½" × 3½"'), `16 horizontal sashes cut 7½ × 3½ (${cuts})`);
+  const alt = planQuilt(b, { cols: 3, rows: 3, setting: 'alternate' });
+  ok(alt.cutting.find((f) => f.fabric === 'plain').entries[0].purpose.includes('rectangles'), 'plain alternates are rectangles');
+  eq(layoutFor(b, 'throw').rows < layoutFor(b, 'throw').cols * 1.3 + 2, true, 'size presets account for the height');
+});
+
+test('a quilt can have any number of borders', () => {
+  const b = buildBlock(byId('nine-patch'), { blockSize: 9 });
+  const q = planQuilt(b, { cols: 2, rows: 2, borders: [2, 1, 2.5, 1, 4] });
+  eq(q.finished.label, `${18 + 2 * 10.5}" × ${18 + 2 * 10.5}"`, 'every border adds twice its width');
+  eq(q.borderList.map((x) => x.id), ['border1', 'border2', 'border3', 'border4', 'border5'], 'five borders, innermost first');
+  eq(q.borders.length, 20, 'four strips each');
+  for (const x of q.borderList) ok(q.cutting.some((f) => f.fabric === x.id), `${x.id} is on the fabric list`);
+  ok(q.steps.filter((s) => s.includes('measure the quilt through the middle')).length === 5, 'five border steps');
+  const old = planQuilt(b, { cols: 2, rows: 2, innerBorder: 1, outerBorder: 3 });
+  eq([old.innerBorder, old.outerBorder], [inches(1), inches(3)], 'the old inner/outer pair still works');
+  const named = planQuilt(b, { cols: 2, rows: 2, borders: [{ width: 2, fabric: { name: 'Navy', hex: '#1F2F55' } }] });
+  eq(named.extras.border1.name, 'Navy', 'a border can name its fabric');
+});
+
+test('alternate blocks can be a second pieced block', () => {
+  const star = buildBlock(byId('sawtooth-star'), { blockSize: 12 });
+  const nine = buildBlock(byId('nine-patch'), { blockSize: 12 });
+  const q = planQuilt(star, { cols: 3, rows: 3, setting: 'alternate', alternateWith: nine });
+  eq([q.counts.pieced, q.counts.alternate, q.counts.plain], [5, 4, 0], 'five stars, four nine patches, no plain squares');
+  ok(q.cells.filter((c) => c.alternate).every((c) => c.block === nine), 'the alternate cells carry the second block');
+  ok(q.steps.some((s) => s.includes('Nine patch')), 'the steps say to make them');
+  const total = (k) => q.cutting.flatMap((f) => f.entries).filter((e) => e.purpose.includes(k)).length;
+  ok(total('Nine patch blocks') > 0, 'and the cutting list charges them');
+  throws(() => planQuilt(star, { setting: 'alternate', alternateWith: buildBlock(byId('nine-patch'), { blockSize: 9 }) }), 'must match', 'sizes must match');
 });
 
 // ---------------------------------------------------------------- tiles ----

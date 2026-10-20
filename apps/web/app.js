@@ -256,7 +256,7 @@ function renderDetail() {
   // facts
   const counts = unitCounts(p.block);
   $('#d-facts').innerHTML = [
-    ['Finished', `${p.block.blockSize}"`],
+    ['Finished', `${p.block.sizeLabel}`],
     ['Pieces', p.block.pieces.length],
     ['Units', p.block.units.length],
     ['Seams', p.plan.seams.length],
@@ -721,7 +721,7 @@ async function runGenerate(prompt) {
     $('#r-name').innerHTML = `${esc(def.name)} ${tierBadge(p.tier)}`;
     const counts = unitCounts(p.block);
     $('#r-facts').textContent =
-      `${p.block.blockSize}" block · ${p.block.pieces.length} pieces · ` +
+      `${p.block.sizeLabel} block · ${p.block.pieces.length} pieces · ` +
       `${p.block.fabricsUsed.length} fabrics · ${p.difficulty.level}. ` +
       `${counts.patch - counts.flip} patches, ${counts.corners} stitch-and-flip corners, ${counts.hst} half-square triangles, ${counts.qst} hourglass, ${counts.geese} flying geese.`;
     $('#r-swatches').innerHTML = p.cutting.fabrics
@@ -786,7 +786,7 @@ function cartItem() {
   if (!def) return null;
   if (isHex(def)) return { def, name: def.name, price: PRICING.hexagon, detail: `${planHexagons({ ...def, ...hexOptsFor(def) }).count} hexagons` };
   const p = patternFor(def.id);
-  return { def, name: def.name, price: priceOf(p), detail: `${p.block.blockSize}" block, ${p.math.seam.name} seam` };
+  return { def, name: def.name, price: priceOf(p), detail: `${p.block.sizeLabel} block, ${p.math.seam.name} seam` };
 }
 
 function renderCheckout() {
@@ -888,7 +888,7 @@ function renderPrint() {
       <div>
         <div class="eyebrow">QuiltBlock Studio</div>
         <h1 style="font-size:2rem;margin:4px 0">${esc(p.def.name)}</h1>
-        <p class="num">${p.block.blockSize}" finished block &middot; ${p.block.pieces.length} pieces &middot;
+        <p class="num">${p.block.sizeLabel} finished block &middot; ${p.block.pieces.length} pieces &middot;
           ${esc(p.math.seam.name)} seam &middot; ${esc(p.difficulty.level)} &middot; quilt ${esc(q.finished.label)}, ${q.counts.pieced} blocks</p>
       </div>
       <div class="test-square">1 inch<br>check me</div>
