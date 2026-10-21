@@ -102,5 +102,8 @@ node tools/try-generate.mjs "a cow with skis on"
 node tools/try-generate.mjs "her cat" C:photoscat.jpg --tier intermediate --fabrics 5
 ```
 
+Add `--live --code <tester code>` to send the same request to the deployed
+site instead (no key on the laptop; the site's limits apply).
+
 It prints the time, the tokens and the cost of each run, and writes the
 block's JSON and SVG next to the photo.
