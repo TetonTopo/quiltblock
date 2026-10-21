@@ -36,10 +36,16 @@ import { limitsFromEnv, sameCode, hashIp, admit, finish, memoryStore } from '../
 const MODEL = 'claude-opus-5-5';
 const MAX_ATTEMPTS = 2;
 
-/** Netlify stops a synchronous function at 60 seconds; leave room to answer. */
-const DEADLINE_MS = 55_000;
+/**
+ * Netlify stops a synchronous function at 30 seconds on the free plan (60 on
+ * paid ones). QUILTBLOCK_TIME_LIMIT_S says which; four seconds are kept back
+ * for start-up and the answer. A design takes about 20 seconds, so on the
+ * free plan there is room for one attempt per request, and the page asks
+ * again itself, with the reason, when a draft is rejected.
+ */
+const timeLimitMs = () => (Number(env('QUILTBLOCK_TIME_LIMIT_S')) || 30) * 1000 - 4_000;
 /** Do not start a second attempt with less than this left. */
-const MIN_ATTEMPT_MS = 20_000;
+const MIN_ATTEMPT_MS = 22_000;
 
 /** QUILTBLOCK_EFFORT picks one of these; medium is the default. */
 const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
@@ -255,7 +261,12 @@ export async function generateBlock(body, { client, now = Date.now } = {}) {
   const gridSize = clamp(Number(body.gridSize) || tier.grids[1] || 8, 3, 12);
   const fabricLimit = clamp(Number(body.fabricLimit) || 4, 2, 10);
   const blockSize = clamp(Number(body.blockSize) || 12, 6, 36);
-  const effort = EFFORTS.includes(env('QUILTBLOCK_EFFORT')) ? env('QUILTBLOCK_EFFORT') : 'medium';
+  // Low effort designs in about 19 seconds, medium in about 23; on a
+  // 30-second function only low leaves room. Raise it on a paid plan.
+  const effort = EFFORTS.includes(env('QUILTBLOCK_EFFORT')) ? env('QUILTBLOCK_EFFORT') : 'low';
+  const deadline = timeLimitMs();
+  // The page's own retry: what was wrong with the last draft, in words.
+  const previous = String(body.previousProblem ?? '').slice(0, 500).trim();
 
   const content = [];
   if (photo?.data && /^image\/(png|jpeg|webp|gif)$/.test(photo.media_type || '')) {
@@ -271,7 +282,8 @@ export async function generateBlock(body, { client, now = Date.now } = {}) {
       `${prompt ? `The customer asked for: "${prompt}".` : ''}\n\n` +
       `Use a ${gridSize} by ${gridSize} grid. Use at most ${fabricLimit} fabrics. ` +
       `The block finishes at ${blockSize} inches, so a cell is ${(blockSize / gridSize).toFixed(2)} inches.\n\n` +
-      `SKILL LEVEL: ${tier.name}. ${tier.prompt}`,
+      `SKILL LEVEL: ${tier.name}. ${tier.prompt}` +
+      (previous ? `\n\nAn earlier draft of this block was rejected: ${previous} Do not repeat that mistake.` : ''),
   });
 
   const messages = [{ role: 'user', content }];
@@ -279,7 +291,7 @@ export async function generateBlock(body, { client, now = Date.now } = {}) {
   const usage = { input_tokens: 0, output_tokens: 0 };
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const left = DEADLINE_MS - (now() - started);
+    const left = deadline - (now() - started);
     // A second attempt that cannot finish before the platform kills the
     // function is worse than an honest error now.
     if (attempt > 1 && left < MIN_ATTEMPT_MS) {
@@ -310,9 +322,16 @@ export async function generateBlock(body, { client, now = Date.now } = {}) {
         { timeout: Math.max(5_000, left) },
       );
     } catch (err) {
-      const status = err?.status === 429 ? 429 : 502;
+      const timedOut = /timeout|timed out/i.test(`${err?.name} ${err?.message}`);
+      const status = err?.status === 429 ? 429 : timedOut ? 504 : 502;
       return done(status, {
-        error: status === 429 ? 'The generator is busy. Try again in a moment.' : 'The generator failed.',
+        error:
+          status === 429
+            ? 'The generator is busy. Try again in a moment.'
+            : timedOut
+              ? 'That design took too long. Try again, or ask for a simpler block.'
+              : 'The generator failed.',
+        retryable: timedOut,
         detail: String(err?.message ?? err).slice(0, 300),
         attempts: attempt,
       });
@@ -386,8 +405,10 @@ export async function generateBlock(body, { client, now = Date.now } = {}) {
   }
 
   return done(422, {
-    error: 'The block came back breaking the rules twice, so it was not shown.',
+    error: 'The block came back breaking the rules, so it was not shown.',
     attempts,
+    retryable: true,
+    problem: attempts[attempts.length - 1] ?? null,
     usage,
   });
 }

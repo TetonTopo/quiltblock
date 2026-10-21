@@ -32,7 +32,8 @@ still contains a live key is not.
 | `QUILTBLOCK_PER_IP_HOURLY` | 6 | Designs per visitor per hour. |
 | `QUILTBLOCK_DAILY_CAP` | 60 | Designs for the whole site per day (UTC). The real spend ceiling. |
 | `QUILTBLOCK_GENERATOR` | on | `off` switches the live generator off without removing the key. |
-| `QUILTBLOCK_EFFORT` | medium | low / medium / high. Higher thinks longer: better blocks, slower, dearer. Netlify stops a function at 60 seconds. |
+| `QUILTBLOCK_EFFORT` | low | low / medium / high. Higher thinks longer: better blocks, slower, dearer. Low takes about 19 s, medium about 23 s. |
+| `QUILTBLOCK_TIME_LIMIT_S` | 30 | Netlify's function limit for the plan: 30 on the free plan, 60 on paid. With 60 there is room for a second attempt inside one request and for medium effort. |
 | `QUILTBLOCK_MODEL` | claude-opus-5-5 | Pin a different model. |
 | `QUILTBLOCK_HASH_SALT` | quiltblock | Salt for the hashed visitor IPs in the rate-limit records. |
 
@@ -74,8 +75,9 @@ Guards in place:
 
 - `max_tokens` is capped, the prompt is truncated at 600 characters, grid size
   and fabric count are clamped, photos are shrunk in the browser and refused
-  over about 4 MB, and there are at most two attempts - the second only if it
-  can finish inside Netlify's 60 seconds.
+  over about 4 MB. On the free plan a request has 30 seconds, which is one
+  design at low effort (about 20 s); a rejected or slow draft is retried once by
+  the page, as a new request carrying the reason it failed.
 - **Rate limits** (`netlify/lib/limits.js`): per visitor per hour and per site
   per day, kept in Netlify Blobs as append-only records (one per request, so
   simultaneous requests cannot lose a count). Visitor IPs are stored only as

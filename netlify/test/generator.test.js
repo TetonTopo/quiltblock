@@ -82,10 +82,10 @@ test('a good first draft comes straight back, built and checked', async () => {
   const p = c.sent[0].params;
   eq(p.model, 'claude-opus-5-5', 'current default model');
   eq(p.tool_choice, { type: 'auto' }, 'no forced tool choice (current models reject it)');
-  eq(p.output_config, { effort: 'medium' }, 'medium effort by default');
+  eq(p.output_config, { effort: 'low' }, 'low effort by default, to fit a 30-second function');
   eq([p.fallbacks, p.betas], ['default', ['server-side-fallback-2026-07-01']], 'refusal fallback on');
   ok(p.tools[0].strict === true, 'strict tool schema');
-  ok(c.sent[0].opts.timeout <= 55_000, 'the call carries the deadline');
+  ok(c.sent[0].opts.timeout <= 26_000, 'the call carries the 30-second deadline, less start-up');
 });
 
 test('a draft that breaks a rule goes back once with the reason', async () => {
@@ -129,6 +129,21 @@ test('no second attempt when the clock is nearly out', async () => {
   eq(r.status, 422, 'an honest error');
   ok(r.body.attempts.some((a) => a.includes('Ran out of time')), 'says why');
   eq(c.sent.length, 1, 'only one call made');
+});
+
+test('the page can ask again with the reason the last draft failed', async () => {
+  const c = stub([drafted(STAR)]);
+  await generateBlock({ prompt: 'a star', tier: 'confident', previousProblem: 'Row 2 has 3 cells.' }, { client: c });
+  const text = c.sent[0].params.messages[0].content.at(-1).text;
+  ok(text.includes('An earlier draft of this block was rejected: Row 2 has 3 cells.'), 'the reason is passed on');
+  const bad = await generateBlock({ prompt: 'x', tier: 'confident' }, { client: stub([drafted(BROKEN), drafted(BROKEN)]) });
+  eq([bad.body.retryable, typeof bad.body.problem], [true, 'string'], 'a rejection says it can be retried, and why');
+});
+
+test('a slow design comes back as a clean, retryable timeout', async () => {
+  const slow = Object.assign(new Error('Request timed out.'), { name: 'APIConnectionTimeoutError' });
+  const r = await generateBlock({ prompt: 'x' }, { client: stub([slow]) });
+  eq([r.status, r.body.retryable], [504, true], 'timeout');
 });
 
 test('bad requests are refused before the model is called', async () => {

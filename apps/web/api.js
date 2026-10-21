@@ -40,16 +40,25 @@ export async function generate({ prompt, photo, fabricLimit, gridSize, blockSize
   const body = { prompt, fabricLimit, gridSize, blockSize, tier };
   if (photo) body.photo = photo; // { media_type, data } base64, no data: prefix
 
-  const res = await fetch(`${API_BASE}/generate`, {
-    method: 'POST',
-    // While the shop is in testing the server wants a tester code.
-    headers: { 'content-type': 'application/json', ...(code ? { 'x-quiltblock-code': code } : {}) },
-    body: JSON.stringify(body),
-  });
+  const send = () =>
+    fetch(`${API_BASE}/generate`, {
+      method: 'POST',
+      // While the shop is in testing the server wants a tester code.
+      headers: { 'content-type': 'application/json', ...(code ? { 'x-quiltblock-code': code } : {}) },
+      body: JSON.stringify(body),
+    });
 
+  // One model call fits in a server request, so a rejected or slow draft is
+  // retried from here, once, with the reason it was rejected.
+  let res = await send();
+  let detail = res.ok ? null : await res.json().catch(() => ({}));
+  if (!res.ok && detail?.retryable) {
+    if (detail.problem) body.previousProblem = detail.problem;
+    res = await send();
+    detail = res.ok ? null : await res.json().catch(() => ({}));
+  }
   if (!res.ok) {
-    const detail = await res.json().catch(() => ({}));
-    throw new GenerateError(detail.error || `The generator returned ${res.status}.`, detail);
+    throw new GenerateError(detail?.error || `The generator returned ${res.status}.`, detail ?? {});
   }
   return { ...(await res.json()), mock: false };
 }
