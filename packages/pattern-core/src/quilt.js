@@ -114,7 +114,7 @@ function mergeGroups(into, from, rename = (k) => k) {
         const cur = dest.get(ek);
         cur.qty += e.qty;
         cur.units += e.units;
-        cur.labels.push(...e.labels);
+        cur.labels.push(...e.labels.filter((l) => !cur.labels.includes(l)));
       } else dest.set(ek, e);
     }
   }
@@ -166,6 +166,12 @@ function spread(total, n, unit = 4) {
  *   mirror            flip every other block left to right
  *   rainbow           rotate the background fabric through RAINBOW, block by block
  *   piecedBorder      set small copies of the block into the outer border
+ *   pianoKeys         make the outer border piano keys: short strips of every
+ *                     fabric in the block, side by side, with plain corners
+ *   stagger           inches of background added to one end of every block,
+ *                     bottom and top in turn, so the pictures step up and down
+ *   alternateColours  { fabricKey: { name, hex } }: every other block swaps that
+ *                     fabric for this one (a second trunk colour, say)
  *   fabrics           overrides for sashing/cornerstone/plain/inner/outer/binding
  *   seam, trim        seam profile ids
  */
@@ -178,6 +184,9 @@ export function planQuilt(block, opts = {}) {
     mirror = false,
     rainbow = false,
     piecedBorder = false,
+    pianoKeys = false,
+    stagger = 0,
+    alternateColours = null,
     alternateWith = null,
     fabrics = {},
     seam,
@@ -197,6 +206,10 @@ export function planQuilt(block, opts = {}) {
   const sashed = setting === 'sashed' || setting === 'cornerstones';
   const S = sashed ? inches(sashing) : 0;
   const blist = borderList(opts);
+  // A staggered quilt makes every cell taller by one background strip.
+  const T = setting === 'panel' ? 0 : inches(stagger || 0);
+  const CH = BH + T;
+  const altKeys = Object.keys(alternateColours ?? {}).filter((k) => block.fabrics[k]);
 
   const extras = { ...DEFAULT_EXTRAS };
   for (const b of blist) {
@@ -221,7 +234,7 @@ export function planQuilt(block, opts = {}) {
   const gridCols = isPanel ? 0 : cols;
   const gridRows = isPanel ? 0 : rows;
   const centreW = panel ? panel.W : cols * BW + (sashed ? (cols + 1) * S : 0);
-  const centreH = panel ? panel.H : rows * BH + (sashed ? (rows + 1) * S : 0);
+  const centreH = panel ? panel.H : rows * CH + (sashed ? (rows + 1) * S : 0);
   const cells = [];
   const counts = { pieced: 0, mirrored: 0, plain: 0, alternate: 0, cornerstones: 0, sashes: 0, minis: 0, corners: 0 };
   if (panel) cells.push({ type: 'panel', x: 0, y: 0, w: panel.W, h: panel.H, fabric: 'panel' });
@@ -233,21 +246,30 @@ export function planQuilt(block, opts = {}) {
   for (let r = 0; r < gridRows; r++) {
     for (let c = 0; c < gridCols; c++) {
       const x = sashed ? S + c * (BW + S) : c * BW;
-      const y = sashed ? S + r * (BH + S) : r * BH;
+      const y0 = sashed ? S + r * (CH + S) : r * CH;
       const plain = setting === 'alternate' && (r + c) % 2 === 1;
-      if (plain && alt) {
-        cells.push({ type: 'block', x, y, w: BW, h: BH, alternate: true, block: alt });
-        counts.alternate++;
-        continue;
-      }
-      if (plain) {
-        cells.push({ type: 'plain', x, y, w: BW, h: BH, fabric: 'plain' });
+      if (plain && !alt) {
+        cells.push({ type: 'plain', x, y: y0, w: BW, h: CH, fabric: 'plain' });
         counts.plain++;
         continue;
       }
+      // Staggered: up blocks carry their strip underneath, down blocks on top,
+      // in a checkerboard so neighbours never sit level.
+      const up = (r + c) % 2 === 0;
+      const y = T && !up ? y0 + T : y0;
+      if (plain) {
+        cells.push({ type: 'block', x, y, w: BW, h: BH, alternate: true, block: alt });
+        if (T) cells.push({ type: 'pad', x, y: up ? y0 + BH : y0, w: BW, h: T, fabric: 'plain', hex: DEFAULT_EXTRAS.plain.hex, alternate: true });
+        counts.alternate++;
+        continue;
+      }
       const flip = mirror && index % 2 === 1;
-      const palette = rainbow && bg ? { [bg]: { ...block.fabrics[bg], hex: RAINBOW[index % RAINBOW.length] } } : null;
-      cells.push({ type: 'block', x, y, w: BW, h: BH, index, mirrored: flip, block: flip ? mirrored : block, palette });
+      const two = altKeys.length > 0 && index % 2 === 1;
+      const bgHex = rainbow && bg ? RAINBOW[index % RAINBOW.length] : null;
+      let palette = bgHex ? { [bg]: { ...block.fabrics[bg], hex: bgHex } } : null;
+      if (two) for (const k of altKeys) palette = { ...(palette ?? {}), [k]: { ...alternateColours[k] } };
+      cells.push({ type: 'block', x, y, w: BW, h: BH, index, mirrored: flip, two, block: flip ? mirrored : block, palette });
+      if (T) cells.push({ type: 'pad', x, y: up ? y0 + BH : y0, w: BW, h: T, fabric: bg, hex: bgHex ?? block.fabrics[bg]?.hex, index });
       counts.pieced++;
       if (flip) counts.mirrored++;
       index++;
@@ -258,7 +280,7 @@ export function planQuilt(block, opts = {}) {
     // Vertical sashes: one left of every block plus one at the row's end.
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c <= cols; c++) {
-        cells.push({ type: 'sash', dir: 'v', x: c * (BW + S), y: S + r * (BH + S), w: S, h: BH, fabric: 'sashing' });
+        cells.push({ type: 'sash', dir: 'v', x: c * (BW + S), y: S + r * (CH + S), w: S, h: CH, fabric: 'sashing' });
         counts.sashes++;
       }
     }
@@ -266,15 +288,15 @@ export function planQuilt(block, opts = {}) {
     for (let r = 0; r <= rows; r++) {
       if (setting === 'cornerstones') {
         for (let c = 0; c < cols; c++) {
-          cells.push({ type: 'sash', dir: 'h', x: S + c * (BW + S), y: r * (BH + S), w: BW, h: S, fabric: 'sashing' });
+          cells.push({ type: 'sash', dir: 'h', x: S + c * (BW + S), y: r * (CH + S), w: BW, h: S, fabric: 'sashing' });
           counts.sashes++;
         }
         for (let c = 0; c <= cols; c++) {
-          cells.push({ type: 'stone', x: c * (BW + S), y: r * (BH + S), w: S, h: S, fabric: 'cornerstone' });
+          cells.push({ type: 'stone', x: c * (BW + S), y: r * (CH + S), w: S, h: S, fabric: 'cornerstone' });
           counts.cornerstones++;
         }
       } else {
-        cells.push({ type: 'sash', dir: 'h', x: 0, y: r * (BH + S), w: centreW, h: S, fabric: 'sashing', long: true });
+        cells.push({ type: 'sash', dir: 'h', x: 0, y: r * (CH + S), w: centreW, h: S, fabric: 'sashing', long: true });
       }
     }
   }
@@ -358,11 +380,41 @@ export function planQuilt(block, opts = {}) {
     }
   }
 
+  // --- a piano-key outer border: strips of every fabric in the quilt, about
+  // 1½" wide, set side by side along each edge, with a plain square in each
+  // corner. Widths are rounded to the quarter inch so they fit exactly. -------
+  let keys = null;
+  if (pianoKeys && outermost && !mini) {
+    const keyFabrics = Object.keys(block.fabrics);
+    keys = { cells: [], fabrics: keyFabrics, tally: new Map(), perSide: {} };
+    let f = 0;
+    for (const side of ['top', 'right', 'bottom', 'left']) {
+      const b = borders.find((x) => x.which === outermost.id && x.side === side);
+      const horizontal = side === 'top' || side === 'bottom';
+      const len = horizontal ? innerEdge.w : innerEdge.h;
+      const n = Math.max(1, Math.round(len / inches(1.5)));
+      let cursor = horizontal ? b.x + OBw : b.y;
+      for (const w of spread(len, n)) {
+        const fabric = keyFabrics[f++ % keyFabrics.length];
+        keys.cells.push(
+          horizontal
+            ? { type: 'key', x: cursor, y: b.y, w, h: OBw, fabric, side }
+            : { type: 'key', x: b.x, y: cursor, w: OBw, h: w, fabric, side },
+        );
+        const t = `${fabric}:${w}`;
+        keys.tally.set(t, { fabric, w, qty: (keys.tally.get(t)?.qty ?? 0) + 1 });
+        cursor += w;
+      }
+      b.keys = n;
+      keys.perSide[side] = n;
+    }
+  }
+
   // --- corner blocks: the block, made to the border's width, in the four
   // corners of the outer border - the star blocks on a panel quilt -----------
   let cornerBlock = null;
   const wantCorners = opts.cornerBlocks ?? isPanel;
-  if (wantCorners && outermost && !mini && block.square !== false) {
+  if (wantCorners && outermost && !mini && !keys && block.square !== false) {
     const sizeIn = toInches(OBw);
     if (validSizes(block.gridSize, [sizeIn]).length) {
       cornerBlock = buildBlock(block, { blockSize: sizeIn, corners: block.corners });
@@ -382,27 +434,43 @@ export function planQuilt(block, opts = {}) {
   const fabricsMap = { ...block.fabrics };
   for (const [k, f] of Object.entries(extras)) fabricsMap[k] = f;
 
-  addBlockCuts(groups, block, math, counts.pieced);
+  // The pieced blocks, cut variant by variant: a mirrored block is cut from the
+  // mirrored drawing (greedy merging can land a patch differently), a rainbow
+  // block charges its background to its own colour, and a two-tone block
+  // charges the swapped fabric to the second colour.
+  const pieced = cells.filter((c) => c.type === 'block' && !c.alternate && !c.corner);
+  const rainbowKey = (i) => `rainbow${i % RAINBOW.length}`;
+  const variants = new Map();
+  for (const c of pieced) {
+    const ri = rainbow && bg ? c.index % RAINBOW.length : -1;
+    const v = `${c.mirrored ? 'm' : 'o'}:${ri}:${c.two ? 2 : 1}`;
+    if (!variants.has(v)) variants.set(v, { block: c.block, ri, two: c.two, n: 0 });
+    variants.get(v).n++;
+  }
+  const rainbowUsed = new Set([...variants.values()].filter((v) => v.ri >= 0).map((v) => v.ri));
+  for (const v of variants.values()) {
+    const tmp = newGroups();
+    addBlockCuts(tmp, v.block, math, v.n);
+    mergeGroups(groups, tmp, (k) => (v.ri >= 0 && k === bg ? rainbowKey(v.ri) : v.two && altKeys.includes(k) ? `${k}-alt` : k));
+  }
+  for (const i of [...rainbowUsed].sort((p, q) => p - q)) {
+    fabricsMap[rainbowKey(i)] = { name: `Background ${i + 1} of ${rainbowUsed.size} (rainbow)`, hex: RAINBOW[i] };
+  }
+  for (const k of altKeys) fabricsMap[`${k}-alt`] = { ...alternateColours[k] };
   if (cornerBlock) {
     const tmp = newGroups();
     addBlockCuts(tmp, cornerBlock, math, counts.corners, { forLabel: 'corner blocks' });
     mergeGroups(groups, tmp);
   }
-  if (rainbow && bg) {
-    // The background is not one fabric any more: it is up to ten, each cut for
-    // the blocks that wear it. Replace its group with one per colour.
-    groups.delete(bg);
-    const per = new Map();
-    cells.filter((c) => c.type === 'block').forEach((c) => {
-      const i = c.index % RAINBOW.length;
-      per.set(i, (per.get(i) ?? 0) + 1);
-    });
-    for (const [i, n] of per) {
-      const tmp = newGroups();
-      addBlockCuts(tmp, block, math, n);
-      const key = `rainbow${i}`;
-      groups.set(key, tmp.get(bg));
-      fabricsMap[key] = { name: `Background ${i + 1} of ${per.size} (rainbow)`, hex: RAINBOW[i] };
+  if (T) {
+    // One background strip per block, in that block's own background colour.
+    const pads = new Map();
+    for (const c of cells.filter((x) => x.type === 'pad')) {
+      const key = c.alternate ? 'plain' : rainbow && bg ? rainbowKey(c.index) : bg;
+      pads.set(key, (pads.get(key) ?? 0) + 1);
+    }
+    for (const [key, n] of pads) {
+      addPlainCut(groups, key, { w: BW + 2 * a, h: T + 2 * a, qty: n, purpose: 'stagger strips, one per block' });
     }
   }
   if (mini) {
@@ -458,6 +526,11 @@ export function planQuilt(block, opts = {}) {
         if (g > 0) addPlainCut(groups, which, { ...sashCut(g, width), qty: n, purpose: 'outer border, between the set-in blocks' });
       }
       addPlainCut(groups, which, { ...sashCut(width, width), qty: 4, purpose: 'outer border corners' });
+    } else if (which === outermost.id && keys) {
+      for (const { fabric, w, qty } of keys.tally.values()) {
+        addPlainCut(groups, fabric, { ...sashCut(w, width), qty, purpose: 'piano keys, outer border' });
+      }
+      addPlainCut(groups, which, { ...sashCut(width, width), qty: 4, purpose: 'piano-key border corners' });
     } else {
       addPlainCut(groups, which, { ...sashCut(width, sides[0].h), qty: 2, purpose: `${label.toLowerCase()}, sides` });
       // With a block in each corner the top and bottom strips stop short of them.
@@ -510,8 +583,15 @@ export function planQuilt(block, opts = {}) {
     `Make ${counts.pieced} ${block.name} block${counts.pieced === 1 ? '' : 's'}` +
       (counts.mirrored ? `, ${counts.mirrored} of them mirrored` : '') +
       (rainbow ? ', rotating the background fabric through the rainbow in reading order' : '') +
+      (altKeys.length ? `, every other one in ${altKeys.map((k) => alternateColours[k].name).join(' and ')} instead of ${altKeys.map((k) => block.fabrics[k].name).join(' and ')}` : '') +
       '. Square each one up to ' + fmtSize(BW + 2 * a, BH + 2 * a).replace(/^(.+) × \1$/, '$1') + ' before you lay anything out.',
   );
+  if (T) {
+    steps.push(
+      `Stagger: sew a ${fmtSize(BW, T)} strip of background to the bottom of every other block and to the top of the rest, ` +
+        `checkerboard fashion, so the pictures step up and down across the quilt. Each block is now ${fmtSize(BW, CH)} finished.`,
+    );
+  }
   if (alt) {
     steps.push(
       `Make ${counts.alternate} ${alt.name} block${counts.alternate === 1 ? '' : 's'} for the alternate positions, squared up the same way.`,
@@ -527,10 +607,10 @@ export function planQuilt(block, opts = {}) {
   } else if (setting === 'alternate') {
     steps.push(`Lay out ${rows} rows of ${cols}, alternating a pieced block and a plain ${blockDims} ${BW === BH ? 'square' : 'rectangle'}, checkerboard fashion. Sew each row, pressing toward the plain ${BW === BH ? 'squares' : 'rectangles'}. Join the rows; the seams nest.`);
   } else if (setting === 'sashed') {
-    steps.push(`Sew a ${fmt(S)} × ${fmt(BH)} sashing strip to the right of every block, and one to the left of the first block in each row. Press toward the sashing. Make ${rows} block rows.`);
+    steps.push(`Sew a ${fmt(S)} × ${fmt(CH)} sashing strip to the right of every block, and one to the left of the first block in each row. Press toward the sashing. Make ${rows} block rows.`);
     steps.push(`Sew a full-width sashing strip to the top of each row, and one to the bottom of the last row. Press toward the sashing. Join the rows, matching the vertical sashes.`);
   } else {
-    steps.push(`Sew a ${fmt(S)} × ${fmt(BH)} sashing strip to the right of every block, and one to the left of the first block in each row. Press toward the sashing. Make ${rows} block rows.`);
+    steps.push(`Sew a ${fmt(S)} × ${fmt(CH)} sashing strip to the right of every block, and one to the left of the first block in each row. Press toward the sashing. Make ${rows} block rows.`);
     steps.push(`Make ${rows + 1} sashing rows: a cornerstone, a ${fmt(BW)} sashing strip, a cornerstone, and so on, ${cols} strips and ${cols + 1} cornerstones each. Press toward the sashing. Join block rows and sashing rows alternately, matching the cornerstones to the vertical sashes.`);
   }
   for (const { id: which, label } of blist) {
@@ -543,6 +623,13 @@ export function planQuilt(block, opts = {}) {
           `${bs.find((b) => b.side === 'top').minis} across the top and bottom and ${bs.find((b) => b.side === 'left').minis} down each side. Add a corner square to each end of the top and bottom strips.`,
       );
       steps.push(`Sew the side border strips on first, then the top and bottom. Press toward the border.`);
+      continue;
+    }
+    if (which === outermost.id && keys) {
+      steps.push(
+        `Piano-key border, ${fmt(width)} finished: cut the keys from every fabric in the quilt and sew them side by side in a scrappy mix into four strips, ` +
+          `${keys.perSide.top} keys for the top and bottom and ${keys.perSide.left} for each side. Sew the side strips on, add a corner square to each end of the top and bottom strips, and sew those on.`,
+      );
       continue;
     }
     if (which === outermost.id && cornerBlock) {
@@ -591,12 +678,15 @@ export function planQuilt(block, opts = {}) {
     finished,
     sizeName: nearestSize(W, H),
     counts,
-    cells: [...cells, ...miniCells],
+    cells: [...cells, ...miniCells, ...(keys?.cells ?? [])],
     borders,
     extras,
     fabricsMap,
     background: bg,
     rainbow: Boolean(rainbow && bg),
+    stagger: T,
+    pianoKeys: Boolean(keys),
+    twoTone: altKeys.length > 0,
     cutting,
     binding,
     backing,
@@ -604,6 +694,25 @@ export function planQuilt(block, opts = {}) {
     steps,
     yardsTotal: cutting.reduce((s, f) => s + (f.yardage.yards ?? 0.25), 0),
   };
+}
+
+/**
+ * The extras a customer can add to a quilt pattern, each priced on its own:
+ * whatever the plan actually ended up with, not what was asked for (a pieced
+ * border that did not fit is not charged).
+ */
+export function addOnsFor(qp) {
+  const out = [];
+  if (qp.sashing) out.push({ id: 'sashing', name: qp.counts.cornerstones ? 'Sashing with cornerstones' : 'Sashing' });
+  const nBorders = qp.borderList.length;
+  if (nBorders > 1) out.push({ id: 'borders', name: `${nBorders} borders`, count: nBorders - 1 });
+  if (qp.pianoKeys) out.push({ id: 'piano', name: 'Piano-key border' });
+  if (qp.mini) out.push({ id: 'pieced', name: 'Blocks set into the border' });
+  if (qp.stagger) out.push({ id: 'stagger', name: 'Staggered blocks' });
+  if (qp.counts.mirrored) out.push({ id: 'mirror', name: 'Mirrored blocks' });
+  if (qp.twoTone) out.push({ id: 'two-tone', name: 'Two-tone blocks' });
+  if (qp.rainbow) out.push({ id: 'rainbow', name: 'Rainbow backgrounds' });
+  return out;
 }
 
 /** The named size this quilt is closest to, for the label on the card. */

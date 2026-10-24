@@ -288,7 +288,10 @@ export function quiltLayoutSvg(qp, { scale = 0.5, labels = false, rotate = true 
       );
       continue;
     }
-    const fill = c.type === 'plain' ? extra('plain') : c.type === 'stone' ? extra('cornerstone') : extra('sashing');
+    const fill =
+      c.type === 'pad' ? c.hex ?? extra('plain')
+        : c.type === 'key' ? qp.block.fabrics[c.fabric]?.hex ?? '#ddd'
+          : c.type === 'plain' ? extra('plain') : c.type === 'stone' ? extra('cornerstone') : extra('sashing');
     out.push(`<rect x="${S(c.x)}" y="${S(c.y)}" width="${S(c.w)}" height="${S(c.h)}" fill="${fill}" stroke="${INK}" stroke-opacity="0.35" stroke-width="0.8"/>`);
   }
   if (labels) {

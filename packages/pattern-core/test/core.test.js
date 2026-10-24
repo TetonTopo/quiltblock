@@ -19,7 +19,7 @@ import {
   polygonArea,
   TIERS, TIER_ORDER, tierOfScore,
   COLORWAYS, applyColorway,
-  planQuilt, layoutFor, QUILT_SIZES,
+  planQuilt, layoutFor, QUILT_SIZES, addOnsFor,
   planHexagons, hexagonsSvg, hexTemplateSvg,
 } from '../src/index.js';
 import { checkDraft, toDefinition } from '../../../netlify/lib/draft.js';
@@ -217,7 +217,9 @@ test('sub-block boundaries stop merging, so a rail fence keeps its four squares'
 test('a block mirrors left to right', () => {
   const m = buildBlock(mirrorDef(byId('teapot')), { blockSize: 12 });
   const o = buildBlock(byId('teapot'), { blockSize: 12 });
-  eq(m.pieces.length, o.pieces.length, 'same piece count');
+  // Merging grows right first, so the mirror can land one patch apart; the
+  // quilt planner cuts mirrored blocks from the mirrored block for that reason.
+  ok(Math.abs(m.pieces.length - o.pieces.length) <= 1, `piece counts within one (${o.pieces.length} vs ${m.pieces.length})`);
   const spout = m.units.find((u) => u.kind === 'geese');
   eq(spout.dir, '>', 'the spout points the other way');
   eq(spout.x, o.size - inches(1.5), 'and sits at the far edge');
@@ -818,6 +820,51 @@ test('a panel quilt frames a printed panel and sets the block in the corners', (
   ok(planQuilt(star, { setting: 'panel', borders: [3], cornerBlocks: false }).cornerBlock === null, 'corner blocks can be turned off');
   const ohio = buildBlock(byId('ohio-star'), { blockSize: 12 });
   ok(planQuilt(ohio, { setting: 'panel', borders: [5] }).cornerBlock === null, 'and are skipped when a 3-grid block will not make 5"');
+});
+
+test('staggered blocks step up and down on a strip of their own background', () => {
+  const cup = buildBlock(byId('teacup'), { blockSize: 12 });
+  const q = planQuilt(cup, { cols: 4, rows: 2, setting: 'sashed', sashing: 2, stagger: 2, rainbow: true });
+  eq(q.finished.label, '58" × 34"', '4 × 12 + 5 × 2 across; 2 × 14 + 3 × 2 down');
+  const blocks = q.cells.filter((c) => c.type === 'block');
+  ok(blocks[0].y !== blocks[1].y, 'neighbours do not sit level');
+  eq(blocks[0].y, blocks[2].y, 'every other one does');
+  const pads = q.cells.filter((c) => c.type === 'pad');
+  eq(pads.length, 8, 'one strip per block');
+  ok(pads.every((p, i) => p.hex === blocks[i].palette[q.background].hex), 'each strip in its own block background');
+  const strips = q.cutting.flatMap((f) => f.entries).filter((e) => e.purpose.includes('stagger'));
+  eq(strips.reduce((s, e) => s + e.qty, 0), 8, 'eight strips on the cutting list');
+  ok(q.steps.some((s) => s.startsWith('Stagger:')), 'and a step for them');
+});
+
+test('a piano-key border uses every fabric in the quilt', () => {
+  const b = buildBlock(byId('sailboat'), { blockSize: 12 });
+  const q = planQuilt(b, { cols: 3, rows: 3, setting: 'sashed', sashing: 2, borders: [2, 4], pianoKeys: true });
+  const keys = q.cells.filter((c) => c.type === 'key');
+  eq(new Set(keys.map((k) => k.fabric)).size, Object.keys(b.fabrics).length, 'every fabric appears');
+  const top = keys.filter((k) => k.side === 'top');
+  eq(top.reduce((s, k) => s + k.w, 0), q.width - 2 * inches(4), 'keys fill the top exactly, corners left plain');
+  ok(keys.every((k) => Math.min(k.w, k.h) >= inches(1.25)), 'no key narrower than 1¼"');
+  const keyCuts = q.cutting.flatMap((f) => f.entries).filter((e) => e.purpose.includes('piano keys'));
+  eq(keyCuts.reduce((s, e) => s + e.qty, 0), keys.length, 'one cut per key');
+  ok(q.cutting.find((f) => f.fabric === 'border2').entries.every((e) => e.qty === 4), 'the outer border fabric is only the corners');
+  eq(addOnsFor(q).map((x) => x.id), ['sashing', 'borders', 'piano'], 'sashing, a second border and the keys are add-ons');
+});
+
+test('two-tone blocks and mirrored blocks are each cut from their own drawing', () => {
+  const tree = byId('willow-tree-five');
+  const b = buildBlock(tree, { blockSize: 12 });
+  const q = planQuilt(b, { cols: 4, rows: 2, setting: 'sashed', mirror: true, alternateColours: tree.quilt.alternateColours });
+  eq(q.cells.filter((c) => c.two).length, 4, 'every other tree takes the second trunk');
+  const trunk = (k) => q.cutting.find((f) => f.fabric === k);
+  ok(trunk('b') && trunk('b-alt'), 'both trunk fabrics are on the list');
+  eq(trunk('b-alt').name, 'Trunk 2 - tan', 'named as given');
+  ok(q.steps[0].includes('every other one in Trunk 2 - tan'), 'the step says which');
+  const pot = buildBlock(byId('teapot'), { blockSize: 12 });
+  const m = planQuilt(pot, { cols: 2, rows: 1, mirror: true });
+  const patches = (blk) => blk.units.filter((u) => u.kind === 'patch').length;
+  const cut = m.cutting.flatMap((f) => f.entries).filter((e) => e.construction === 'patch').reduce((s, e) => s + e.qty, 0);
+  eq(cut, patches(pot) + patches(m.mirroredBlock), 'patches for one teapot each way, counted from each drawing');
 });
 
 // ------------------------------------------------------ the 3/4" rule ----

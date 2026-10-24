@@ -107,7 +107,8 @@
         <div class="toggle" role="group" aria-label="Preview">
           <button id="mode-block" aria-pressed="true">Block</button>
           <button id="mode-exploded" aria-pressed="false">Exploded</button>
-          <button id="mode-press" aria-pressed="false">Seams &amp; pressing</button>
+          <!-- Quilters who buy patterns know how to seam and press; the plan stays in the engine. -->
+          <button id="mode-press" aria-pressed="false" hidden>Seams &amp; pressing</button>
           <button id="mode-quilt" aria-pressed="false">As a quilt</button>
           <button id="mode-coloring" aria-pressed="false">Coloring sheet</button>
         </div>
@@ -229,7 +230,11 @@
             <label><input type="checkbox" id="q-mirror"> Mirror every other block</label>
             <label><input type="checkbox" id="q-rainbow"> Rainbow backgrounds, one colour per block</label>
             <label><input type="checkbox" id="q-pieced"> Set small blocks into the outer border</label>
+            <label><input type="checkbox" id="q-piano"> Piano-key outer border, every fabric in the quilt</label>
+            <label><input type="checkbox" id="q-stagger"> Stagger the blocks up and down</label>
+            <label id="q-twotone-row" style="display:none"><input type="checkbox" id="q-twotone"> <span id="q-twotone-label">Two-tone</span></label>
           </div>
+          <p class="note" id="q-price"></p>
           <p class="note" id="q-note"></p>
         </div>
         <div class="mat quiltmat" id="q-svg"></div>

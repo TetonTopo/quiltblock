@@ -23,6 +23,7 @@ import {
   QUILT_SIZES,
   SETTINGS,
   layoutFor,
+  addOnsFor,
   planHexagons,
   hexagonsSvg,
   hexTemplateSvg,
@@ -118,8 +119,24 @@ function patternFor(id, opts = {}) {
   });
 }
 
-const priceOf = (p) =>
+const basePrice = (p) =>
   p.def.custom ? PRICING.custom : p.block.blockSize <= 10 ? PRICING.block10 : PRICING.block12;
+
+/**
+ * The quilt extras the customer added in the planner, each charged
+ * PRICING.addOn (one per extra border). The quilt the pattern is designed as
+ * comes with it: only what goes beyond that is charged.
+ */
+function addOnsOf(p) {
+  const o = quiltOptsFor(p.def);
+  const designed = new Map(addOnsFor(p.quilt(quiltArgs(p, { ...QUILT_DEFAULTS, ...(p.def.quilt ?? {}), twoTone: Boolean(p.def.quilt?.alternateColours) }))).map((a) => [a.id, a.count ?? 1]));
+  return addOnsFor(p.quilt(quiltArgs(p, o)))
+    .map((a) => ({ ...a, extra: (a.count ?? 1) - (designed.get(a.id) ?? 0) }))
+    .filter((a) => a.extra > 0)
+    .map((a) => ({ ...a, price: PRICING.addOn * a.extra }));
+}
+
+const priceOf = (p) => basePrice(p) + addOnsOf(p).reduce((s, a) => s + a.price, 0);
 
 const tierBadge = (tier) => `<span class="badge tier-${tier.id}">${esc(tier.short ?? tier.name)}</span>`;
 
@@ -134,7 +151,7 @@ const bendBadge = (p) => {
 const HOUSE_RULES = [
   ['01', 'Straight lines only', 'Horizontal, vertical, or a true 45° diagonal. Nothing you cannot rotary-cut against a ruler.'],
   ['02', 'The seam is a setting', 'Scant ¼" by default, but ⅛" for a doll quilt or ½" for flannel. Every cut size is derived, never looked up.'],
-  ['03', 'Every piece labelled', 'A, B, C in reading order, grouped by fabric, with the cut size next to it and a pressing arrow on the diagram.'],
+  ['03', 'Every piece labelled', 'A, B, C in reading order, grouped by fabric, with the cut size next to it.'],
   ['04', 'Complexity is a dial', 'Beginner to advanced is a score computed from the geometry: pieces, bias edges, tiny bits. The label cannot lie.'],
 ];
 
@@ -174,7 +191,7 @@ function cardHtml(p) {
   return `<button class="card" data-open="${p.def.id}" aria-label="Open ${esc(p.def.name)}">
     <div class="thumb">${p.svg({ labels: false, scale: 1.3 })}</div>
     <div class="meta">
-      <div class="row-between"><span class="name">${esc(p.def.name)}</span><span class="price">$${priceOf(p)}</span></div>
+      <div class="row-between"><span class="name">${esc(p.def.name)}</span><span class="price">$${basePrice(p)}</span></div>
       <span class="sub">${tierBadge(p.tier)} ${esc(p.def.subject)} &middot; ${p.block.pieces.length} pieces${kinds.length ? ' &middot; ' + kinds.join(', ') : ''}</span>
     </div>
   </button>`;
@@ -318,7 +335,6 @@ function renderDetail() {
     ['Half-square', counts.hst],
     ['Hourglass', counts.qst],
     ['Flying geese', counts.geese],
-    ['Pressed open', p.plan.pressOpenCount],
   ]
     .filter(([, v]) => v > 0)
     .map(([k, v]) => `<div><span class="k">${k}</span><span class="v num">${v}</span></div>`)
@@ -354,44 +370,17 @@ function renderUnits(p) {
       .join('')}</div>`;
 }
 
+/**
+ * People who buy patterns know how to sew a seam and press it, so the pattern
+ * does not explain either. It speaks up only for the one unusual move: a
+ * partial seam.
+ */
 function renderSeamPanel(p) {
-  const counts = unitCounts(p.block);
-  const constructions = [
-    counts.patch - counts.flip > 0 && ['Plain patches', `${counts.patch - counts.flip} rectangles, cut at the finished size plus ${fmt(p.math.allowance * 2)}.`],
-    counts.flip && ['Stitch-and-flip corners', `${counts.corners} corners on ${counts.flip} rectangle${counts.flip === 1 ? '' : 's'}. A small square laid on the corner, sewn across, trimmed, flipped. No triangle is ever cut.`],
-    counts.hst && ['Half-square triangles', `${counts.hst} units. Two squares, one diagonal, sewn either side and cut apart.`],
-    counts.qst && ['Hourglass units', `${counts.qst} units. Two half-square triangles crossed and cut on the other diagonal.`],
-    counts.geese && ['Flying geese', `${counts.geese} units, built no-waste: one big square, four small, four geese.`],
-  ].filter(Boolean);
-
-  const warn = p.plan.needsPartialSeam
+  $('#d-seams').innerHTML = p.plan.needsPartialSeam
     ? `<div class="callout flag"><strong>This block needs a partial seam.</strong>
         <span>Part of one seam is sewn, the neighbouring pieces go on, then you come back
-        and finish it. It is the one fiddly step in the pattern and the instructions
-        walk through it.</span></div>`
-    : `<div class="callout"><strong>No partial seams, no set-in Y-seams.</strong>
-        <span>Every seam runs edge to edge across whatever is already sewn, so the whole
-        block goes together in straight lines.</span></div>`;
-
-  const bulk = p.plan.bulk.length
-    ? `<p class="muted" style="font-size:.88rem">${p.plan.bulk.length} intersection${p.plan.bulk.length === 1 ? '' : 's'}
-       where four or more pieces meet. Those are circled on the pressing diagram and their
-       seams are pressed open so the block stays flat.</p>`
+        and finish it. The sew order says where.</span></div>`
     : '';
-
-  $('#d-seams').innerHTML = `
-    <h3>Seams in this block</h3>
-    <p class="muted" style="margin:6px 0 14px">${esc(p.plan.summary)}</p>
-    ${warn}
-    <div class="tablewrap">
-      <table class="spec">
-        <thead><tr><th>Construction</th><th>How it is built</th></tr></thead>
-        <tbody>${constructions
-          .map(([k, v]) => `<tr><td><strong>${k}</strong></td><td class="muted">${esc(v)}</td></tr>`)
-          .join('')}</tbody>
-      </table>
-    </div>
-    ${bulk}`;
 }
 
 function cutRowsHtml(fabrics, { showLabels = true } = {}) {
@@ -457,33 +446,25 @@ function renderCuts(p) {
       strips. The quilt planner below totals it for the whole quilt.</p>`;
 }
 
+/** Drop the pressing sentences from a step: "Sew A to B. Press toward B." -> "Sew A to B." */
+function noPressing(text) {
+  const kept = text.split(/(?<=\.)\s+/).filter((t) => !/^(Press|Pressing)\b/.test(t) && !/^press\b/.test(t));
+  return (kept.length ? kept.join(' ') : text)
+    .replace(/,? pressing [^.,;]*(?=[.,;])/g, '')
+    .replace(/,? and press(?: [^.,;]*)?(?=[.;])/g, '');
+}
+
 function renderOrder(p) {
   const f = state.method === 'fpp' ? p.foundation() : null;
   const steps = f
     ? f.instructions.map((t) => ({ text: t }))
     : [...p.plan.steps];
 
-  const pressing = state.method === 'fpp'
-    ? ''
-    : `<h3 style="margin-top:26px">Pressing</h3>
-       <div class="tablewrap"><table class="spec">
-         <thead><tr><th>Seam</th><th>Press</th><th>Why</th></tr></thead>
-         <tbody>${p.plan.seams
-           .filter((s) => s.type === 'straight')
-           .map(
-             (s, i) =>
-               `<tr><td class="num">${i + 1}. ${s.orientation}</td>
-                <td><strong>${esc(s.press)}</strong></td>
-                <td class="muted">${esc(s.reason)}${s.note ? ` <span style="font-size:.9em">${esc(s.note)}</span>` : ''}</td></tr>`,
-           )
-           .join('')}</tbody></table></div>`;
-
   $('#d-order').innerHTML = `
     <h3 style="margin-top:26px">Sew order</h3>
     <ol class="steps-list" style="margin-top:12px">
-      ${steps.map((s) => `<li${s.phase === 'units' ? ' class="unit-step"' : ''}>${esc(s.text)}</li>`).join('')}
-    </ol>
-    ${pressing}`;
+      ${steps.map((s) => `<li${s.phase === 'units' ? ' class="unit-step"' : ''}>${esc(noPressing(s.text))}</li>`).join('')}
+    </ol>`;
 }
 
 /* ------------------------------------------------------------ the planner */
@@ -492,23 +473,32 @@ const QUILT_DEFAULTS = {
   preset: 'custom',
   cols: 4,
   rows: 5,
-  setting: 'straight',
+  setting: 'sashed',
   sashing: 2,
   innerBorder: 0,
   outerBorder: 4,
   mirror: false,
   rainbow: false,
   piecedBorder: false,
+  pianoKeys: false,
+  stagger: 0,
+  twoTone: false,
 };
 
 function quiltOptsFor(def) {
-  if (!state.quilt[def.id]) state.quilt[def.id] = { ...QUILT_DEFAULTS, ...(def.quilt ?? {}) };
+  if (!state.quilt[def.id]) {
+    state.quilt[def.id] = { ...QUILT_DEFAULTS, ...(def.quilt ?? {}), twoTone: Boolean(def.quilt?.alternateColours) };
+  }
   return state.quilt[def.id];
 }
 
 function quiltFor(p) {
-  const o = quiltOptsFor(p.def);
-  return p.quilt({
+  return p.quilt(quiltArgs(p, quiltOptsFor(p.def)));
+}
+
+/** Planner settings -> planQuilt options. */
+function quiltArgs(p, o) {
+  return {
     cols: o.cols,
     rows: o.rows,
     setting: o.setting,
@@ -518,13 +508,16 @@ function quiltFor(p) {
     mirror: o.mirror,
     rainbow: o.rainbow,
     piecedBorder: o.piecedBorder,
+    pianoKeys: o.pianoKeys,
+    stagger: o.stagger,
+    alternateColours: o.twoTone ? p.def.quilt?.alternateColours : null,
     // A block drafted from a real quilt carries that quilt's setting: its stack
     // of borders, its panel, the second block it alternates with.
     borders: o.borders,
     panel: o.panel,
     cornerBlocks: o.cornerBlocks,
     alternateWith: o.setting === 'alternate' ? alternateFor(p, o.alternateWith) : null,
-  });
+  };
 }
 
 /** The second block for an alternate setting, made at the same size, or null for plain squares. */
@@ -562,6 +555,15 @@ function renderPlanner(p) {
   $('#q-mirror').checked = o.mirror;
   $('#q-rainbow').checked = o.rainbow;
   $('#q-pieced').checked = o.piecedBorder;
+  $('#q-piano').checked = o.pianoKeys;
+  $('#q-stagger').checked = Boolean(o.stagger);
+  $('#q-twotone').checked = o.twoTone;
+  const second = p.def.quilt?.alternateColours;
+  $('#q-twotone-row').style.display = second ? '' : 'none';
+  if (second) {
+    $('#q-twotone-label').textContent = `Two-tone: every other block in ${Object.values(second).map((f) => f.name).join(', ')}`;
+  }
+  $('#q-piano').disabled = !o.outerBorder;
   $('#q-sashing').disabled = !(o.setting === 'sashed' || o.setting === 'cornerstones');
   $('#q-pieced').disabled = !o.outerBorder;
   $('#q-cols').disabled = $('#q-rows').disabled = o.setting === 'panel';
@@ -575,6 +577,12 @@ function renderPlanner(p) {
     (q.rainbow ? `The background changes block by block, so it is bought as ${q.cutting.filter((f) => f.fabric.startsWith('rainbow')).length} fat quarters or so instead of one fabric.` : '');
 
   $('#q-svg').innerHTML = q.svg({ scale: 0.6 });
+
+  const extras = addOnsOf(p);
+  $('#q-price').innerHTML = `Pattern <span class="num">$${basePrice(p)}</span>` +
+    extras.map((a) => ` + ${esc(a.name.toLowerCase())} <span class="num">$${a.price}</span>`).join('') +
+    (extras.length ? ` = <strong class="num">$${priceOf(p)}</strong>` : '') +
+    ` <span class="muted">· each extra is $${PRICING.addOn}</span>`;
 
   const total = q.cutting.reduce((s, f) => s + (f.yardage.yards ?? 0.25), 0);
   $('#q-fabrics').innerHTML = `
@@ -625,7 +633,7 @@ function renderPlanner(p) {
 
   $('#q-steps').innerHTML = `
     <h3 style="margin-top:26px">Putting the quilt together</h3>
-    <ol class="steps-list" style="margin-top:12px">${q.steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol>`;
+    <ol class="steps-list" style="margin-top:12px">${q.steps.map((s) => `<li>${esc(noPressing(s))}</li>`).join('')}</ol>`;
 }
 
 /* ----------------------------------------------------------- hexagons ---- */
@@ -773,9 +781,23 @@ async function runGenerate(prompt) {
     steps.forEach((li) => li.classList.remove('on', 'done'));
     $('#stage-empty').hidden = false;
     $('#stage-empty').textContent = 'That one did not come out. Try describing it a different way.';
+    const needsCode = err instanceof GenerateError && err.detail?.needsCode;
+    const brokeRules = err instanceof GenerateError && err.detail?.problem;
+    const [title, body] = needsCode
+      ? ['The live generator needs a tester code.', 'Type the tester code into the "Tester code" box at the top of this form, then press Generate again. The code is remembered on this device.']
+      : brokeRules
+        ? ['The design did not come through.', 'It was drawn twice and both drafts broke a house rule (most often a piece too small to sew at your skill level), so neither was shown. A simpler description, a higher skill level or the coarser grid usually gets through.']
+        : err instanceof GenerateError
+          ? ['The design did not come through.', err.message]
+          : ['The generator could not be reached.', err.message];
     $('#gen-error').innerHTML = `<div class="callout flag" style="margin-top:12px">
-      <strong>${esc(err instanceof GenerateError ? (err.detail?.needsCode ? 'The live generator needs a tester code.' : 'The design did not come through.') : 'The generator could not be reached.')}</strong>
-      <span>${esc(err.message)}</span></div>`;
+      <strong>${esc(title)}</strong>
+      <span>${esc(body)}</span></div>`;
+    if (needsCode) {
+      $('#code-field').hidden = false;
+      $('#f-code').focus();
+      $('#code-field').scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
   } finally {
     $('#generate').disabled = false;
     generating = false;
@@ -853,7 +875,13 @@ function cartItem() {
   if (!def) return null;
   if (isHex(def)) return { def, name: def.name, price: PRICING.hexagon, detail: `${planHexagons({ ...def, ...hexOptsFor(def) }).count} hexagons` };
   const p = patternFor(def.id);
-  return { def, name: def.name, price: priceOf(p), detail: `${p.block.sizeLabel} block, ${p.math.seam.name} seam` };
+  const extras = addOnsOf(p);
+  return {
+    def,
+    name: def.name,
+    price: priceOf(p),
+    detail: `${p.block.sizeLabel} block` + (extras.length ? ` · quilt with ${extras.map((a) => a.name.toLowerCase()).join(', ')}` : ''),
+  };
 }
 
 function renderCheckout() {
@@ -995,9 +1023,8 @@ function renderPrint() {
     <h2 style="margin-top:22px;font-size:1.3rem">The block</h2>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:12px">
       <div>${p.exploded({ scale: 1.6, gap: 8 })}<p style="font-size:.8rem">Exploded: units pulled apart along the seams that join them.</p></div>
-      <div>${p.svg({ scale: 1.6, labels: false, overlay: 'pressing', plan: p.plan })}
-        <p style="font-size:.8rem">Pressing plan. Arrows show which way each seam goes;
-        circles mark where four or more pieces meet.</p></div>
+      <div>${p.svg({ scale: 1.6 })}
+        <p style="font-size:.8rem">The finished block, every piece labelled.</p></div>
     </div>
     <table class="spec" style="margin-top:12px"><thead><tr><th>Fabric</th><th class="qty">Cut</th><th>Size</th><th>For</th><th>Pieces</th></tr></thead>
       <tbody>${p.cutting.fabrics
@@ -1015,11 +1042,11 @@ function renderPrint() {
 
     <h2 style="margin-top:22px;font-size:1.3rem">Sew the block in this order</h2>
     <ol style="font-size:.9rem">${(f ? f.instructions.map((t) => ({ text: t })) : p.plan.steps)
-      .map((s) => `<li>${esc(s.text)}</li>`)
+      .map((s) => `<li>${esc(noPressing(s.text))}</li>`)
       .join('')}</ol>
 
     <h2 style="margin-top:22px;font-size:1.3rem">Put the quilt together</h2>
-    <ol style="font-size:.9rem">${q.steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol>
+    <ol style="font-size:.9rem">${q.steps.map((s) => `<li>${esc(noPressing(s))}</li>`).join('')}</ol>
 
     <div class="page-break"></div>
     <h2 style="margin-top:22px;font-size:1.3rem">Coloring sheet</h2>
@@ -1225,7 +1252,10 @@ $('#q-inner').onchange = plannerChange((o, el) => { o.innerBorder = Number(el.va
 $('#q-outer').onchange = plannerChange((o, el) => { o.outerBorder = Number(el.value); delete o.borders; if (!o.outerBorder) o.piecedBorder = false; });
 $('#q-mirror').onchange = plannerChange((o, el) => { o.mirror = el.checked; });
 $('#q-rainbow').onchange = plannerChange((o, el) => { o.rainbow = el.checked; });
-$('#q-pieced').onchange = plannerChange((o, el) => { o.piecedBorder = el.checked; });
+$('#q-pieced').onchange = plannerChange((o, el) => { o.piecedBorder = el.checked; if (el.checked) o.pianoKeys = false; });
+$('#q-piano').onchange = plannerChange((o, el) => { o.pianoKeys = el.checked; if (el.checked) o.piecedBorder = false; });
+$('#q-stagger').onchange = plannerChange((o, el) => { o.stagger = el.checked ? 2 : 0; });
+$('#q-twotone').onchange = plannerChange((o, el) => { o.twoTone = el.checked; });
 
 const hexChange = (mutate) => (e) => {
   const def = DEFS.get(state.blockId);
