@@ -1,6 +1,6 @@
 # QuiltBlock
 
-Quilt patterns generated from geometry.
+Quilt patterns generated from geometry. New here? Start with [docs/project-map.md](docs/project-map.md).
 
 You pick a block — or describe one nobody has made, at the skill level you want
 — and get back a whole quilt pattern that actually sews: every piece labelled with its exact cut size, the seam
