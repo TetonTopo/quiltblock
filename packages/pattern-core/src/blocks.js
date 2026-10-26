@@ -269,7 +269,7 @@ const STARTER = [
     quilt: { cols: 3, rows: 3, setting: 'sashed', sashing: 2, outerBorder: 4 },
     subgrid: 3,
     rows: [
-      'k    k k   k/l . .   k/l . .',
+      'k    k k   k\\l . .   k\\l . .',
       'k    k k   .   . .   .   . .',
       'k    k k   .   . .   .   . .',
       'l\\k . .   l   l l   l   l l',

@@ -822,6 +822,32 @@ test('a panel quilt frames a printed panel and sets the block in the corners', (
   ok(planQuilt(ohio, { setting: 'panel', borders: [5] }).cornerBlock === null, 'and are skipped when a 3-grid block will not make 5"');
 });
 
+test('the sew order works from the centre out, naming the pieces, one picture per step', () => {
+  const p = makePattern(byId('courthouse-steps'));
+  const text = p.plan.steps.map((s) => s.text);
+  eq(text, [
+    'Sew E, G and H together, top to bottom.',
+    'Sew D to the left and F to the right of the step 1 unit.',
+    'Sew B to the top and I to the bottom of the step 2 unit.',
+    'Sew A to the left and C to the right of the step 3 unit.',
+  ], 'courthouse steps go on log by log');
+  eq(p.plan.steps[1].added, ['D', 'F'], 'step 2 adds D and F');
+  ok(p.stepSvg(p.plan.steps[1]).includes('>D<') && !p.stepSvg(p.plan.steps[1]).includes('>A<'), 'its picture shows the unit so far, not the whole block');
+});
+
+test('a rail fence is one strip set cut into squares', () => {
+  const p = makePattern(byId('rail-fence'));
+  const set = p.plan.steps.find((s) => s.kind === 'strip');
+  ok(set && set.text.includes('2" × 26" strip of each'), `one strip of each fabric (${set?.text})`);
+  ok(set.text.includes('into 4 6½" squares'), 'cut into four squares');
+  const cuts = p.cutting.fabrics.flatMap((f) => f.entries);
+  ok(cuts.every((e) => e.construction === 'strip' && e.qty === 1), 'the cutting list is four strips, not sixteen rectangles');
+  ok(p.plan.steps.some((s) => s.text.includes('strips running up and down')), 'and says which way each square turns');
+  const q = p.quilt({ cols: 4, rows: 5 });
+  const snow = q.cutting.find((f) => f.fabric === 'a').entries.find((e) => e.construction === 'strip');
+  eq([snow.segments, snow.qty], [80, 14], 'for a quilt: 80 squares from 14 width-of-fabric strips, six to a strip');
+});
+
 test('staggered blocks step up and down on a strip of their own background', () => {
   const cup = buildBlock(byId('teacup'), { blockSize: 12 });
   const q = planQuilt(cup, { cols: 4, rows: 2, setting: 'sashed', sashing: 2, stagger: 2, rainbow: true });

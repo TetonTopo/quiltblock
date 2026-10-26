@@ -454,6 +454,14 @@ function noPressing(text) {
     .replace(/,? and press(?: [^.,;]*)?(?=[.;])/g, '');
 }
 
+/** One sew-order step: the words, and beside them the unit as it stands once the step is sewn. */
+function stepBody(p, s, scale) {
+  const pic = scale && s.region ? p.stepSvg(s, { scale }) : '';
+  return pic
+    ? `<div class="step-row"><div class="step-pic">${pic}</div><span>${esc(noPressing(s.text))}</span></div>`
+    : esc(noPressing(s.text));
+}
+
 function renderOrder(p) {
   const f = state.method === 'fpp' ? p.foundation() : null;
   const steps = f
@@ -463,7 +471,7 @@ function renderOrder(p) {
   $('#d-order').innerHTML = `
     <h3 style="margin-top:26px">Sew order</h3>
     <ol class="steps-list" style="margin-top:12px">
-      ${steps.map((s) => `<li${s.phase === 'units' ? ' class="unit-step"' : ''}>${esc(noPressing(s.text))}</li>`).join('')}
+      ${steps.map((s) => `<li${s.phase === 'units' ? ' class="unit-step"' : ''}>${stepBody(p, s, f ? null : 0.75)}</li>`).join('')}
     </ol>`;
 }
 
@@ -1042,7 +1050,7 @@ function renderPrint() {
 
     <h2 style="margin-top:22px;font-size:1.3rem">Sew the block in this order</h2>
     <ol style="font-size:.9rem">${(f ? f.instructions.map((t) => ({ text: t })) : p.plan.steps)
-      .map((s) => `<li>${esc(noPressing(s.text))}</li>`)
+      .map((s) => `<li>${stepBody(p, s, f ? null : 0.45)}</li>`)
       .join('')}</ol>
 
     <h2 style="margin-top:22px;font-size:1.3rem">Put the quilt together</h2>

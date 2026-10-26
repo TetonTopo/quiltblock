@@ -205,6 +205,38 @@ export function unitSvg(block, unit, { scale = 3, palette } = {}) {
   return out.join('');
 }
 
+/**
+ * One step of the sew order: the unit as it stands once the step is sewn,
+ * with the pieces this step adds at full strength and the ones already joined
+ * knocked back, so each picture shows what just went on.
+ */
+export function stepSvg(block, step, { scale = 1.2, palette } = {}) {
+  if (!step.region) return '';
+  const pal = palette ? { ...block.fabrics, ...palette } : block.fabrics;
+  const S = (n) => n * scale;
+  const { x0, y0, x1, y1 } = step.region;
+  const show = new Set(step.labels);
+  const added = new Set(step.added ?? []);
+  const out = [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${S(x1 - x0)}" height="${S(y1 - y0)}" viewBox="0 0 ${S(x1 - x0)} ${S(y1 - y0)}" role="img" aria-label="${esc(step.text)}">`,
+  ];
+  // Paper behind, so the knocked-back pieces fade toward white on any page.
+  out.push(`<rect width="${S(x1 - x0)}" height="${S(y1 - y0)}" fill="#ffffff"/>`);
+  const labelScale = Math.max(scale, 1.5);
+  for (const p of block.pieces) {
+    if (!show.has(p.label)) continue;
+    const hex = pal[p.fabric]?.hex ?? '#ccc';
+    out.push(
+      `<g opacity="${added.size && !added.has(p.label) ? 0.4 : 1}">` +
+        piecePolygon(p, S, hex, INK, 1, -x0, -y0, 0.6) +
+        pieceLabel(p, S, labelScale, isDark(hex) ? PAPER : INK, -x0, -y0) +
+        '</g>',
+    );
+  }
+  out.push('</svg>');
+  return out.join('');
+}
+
 /** The coloring sheet: just the lines, for trying colours with pencils. */
 export function coloringSvg(block, opts = {}) {
   return blockSvg(block, { ...opts, outline: true, labels: opts.labels ?? true });

@@ -203,6 +203,57 @@ const UNIT_STEP = {
   },
 };
 
+/**
+ * Sub-blocks that are nothing but parallel strips in the same order - the
+ * squares of a rail fence. Nobody cuts sixteen rectangles for those: you sew
+ * one long strip of each fabric together and cut the strip set into squares,
+ * turning them as the block needs. Returns the squares that share a strip
+ * sequence with at least one other (turned or not), each with a `key` naming
+ * its strip set.
+ */
+export function stripSquares(block) {
+  const n = block.subgrid ?? 1;
+  if (n < 2) return [];
+  const W = block.width / n;
+  const H = block.height / n;
+  const squares = [];
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      const x0 = c * W, y0 = r * H, x1 = x0 + W, y1 = y0 + H;
+      const us = block.units.filter((u) => u.x >= x0 && u.x + u.w <= x1 && u.y >= y0 && u.y + u.h <= y1);
+      if (us.length < 2 || us.some((u) => u.kind !== 'patch' || u.corners?.length)) continue;
+      const across = us.every((u) => u.x === x0 && u.w === W);
+      const upDown = us.every((u) => u.y === y0 && u.h === H);
+      if (!across && !upDown) continue;
+      const ordered = [...us].sort((p, q) => (across ? p.y - q.y : p.x - q.x));
+      const seq = ordered.map((u) => `${u.a}:${across ? u.h : u.w}`);
+      const fwd = seq.join(',');
+      const rev = [...seq].reverse().join(',');
+      squares.push({
+        region: { x0, y0, x1, y1 },
+        units: ordered,
+        across,
+        row: r,
+        col: c,
+        n,
+        side: across ? W : H,
+        key: `${W}x${H}|${fwd <= rev ? fwd : rev}`,
+        // The strips in sewing order, as the canonical sequence reads them.
+        strips: (fwd <= rev ? ordered : [...ordered].reverse()).map((u) => ({ fabric: u.a, width: across ? u.h : u.w })),
+      });
+    }
+  }
+  const count = new Map();
+  for (const s of squares) count.set(s.key, (count.get(s.key) ?? 0) + 1);
+  return squares.filter((s) => count.get(s.key) >= 2);
+}
+
+const ROW_NAME = (r, n) => (n === 2 ? ['top', 'bottom'][r] : n === 3 ? ['top', 'middle', 'bottom'][r] : `row ${r + 1}`);
+const COL_NAME = (c, n) => (n === 2 ? ['left', 'right'][c] : n === 3 ? ['left', 'middle', 'right'][c] : `column ${c + 1}`);
+
+/** "E, G and H" */
+const listOf = (xs) => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+
 /** The same unit shape, ignoring position, so identical units group together. */
 function unitSignature(u) {
   const corners = (u.corners ?? []).map((k) => `${k.pos}${k.fabric}`).sort().join('');
@@ -260,21 +311,122 @@ export function planAssembly(block, { seam, trim } = {}) {
     });
   }
 
-  const describe = (node, path = 'the block') => {
-    if (node.type === 'unit' || node.type === 'partial') return;
-    const kids = node.children.length;
-    const dir = node.type === 'rows' ? 'rows' : 'columns';
-    const seamDir = node.type === 'rows' ? 'horizontal' : 'vertical';
+  // Strip sets: one long strip of each fabric, sewn together, cut into squares.
+  const squares = stripSquares(block);
+  const sets = new Map();
+  for (const s of squares) {
+    if (!sets.has(s.key)) sets.set(s.key, []);
+    sets.get(s.key).push(s);
+  }
+  for (const group of sets.values()) {
+    const s = group[0];
+    const seg = m.patch(s.side, s.side).w;
+    const widths = new Set(s.strips.map((t) => t.width));
+    const cutW = (t) => fmt(m.patch(t.width, t.width).w);
+    const strips =
+      widths.size === 1
+        ? `a ${cutW(s.strips[0])} × ${fmt(group.length * seg)} strip of each of ${listOf(s.strips.map((t) => F(t.fabric)))}`
+        : `one strip ${fmt(group.length * seg)} long of each: ${listOf(s.strips.map((t) => `${F(t.fabric)} ${cutW(t)} wide`))}`;
+    const labels = group.flatMap((g) => g.units.flatMap((u) => u.pieces.map((p) => p.label))).sort();
+    unitGroups.push({
+      kind: 'strip',
+      count: group.length,
+      sample: { x: s.region.x0, y: s.region.y0, w: s.side, h: s.side, pieces: s.units.flatMap((u) => u.pieces) },
+      finished: `${fmt(s.side)} square`,
+      unfinished: `${fmt(seg)} square`,
+      name: `strip-set square${group.length === 1 ? '' : 's'}, all cut from one strip set`,
+      labels,
+    });
+    steps.push({
+      phase: 'units',
+      count: group.length,
+      kind: 'strip',
+      labels,
+      region: s.region,
+      added: s.units.flatMap((u) => u.pieces.map((p) => p.label)),
+      text:
+        `Make a strip set: cut ${strips}, and sew them together along their long edges in that order. ` +
+        `Cut it across into ${group.length} ${fmt(seg)} squares. Pieces ${listOf(labels)} all come from this one strip set.`,
+    });
+  }
+
+  // The sew order, inside out: the smallest sewn unit first, then whatever is
+  // added to it, each step naming its pieces and drawn on its own. A strip-set
+  // square counts as one piece here.
+  const inSquare = new Map();
+  for (const s of squares) for (const u of s.units) inSquare.set(u, s);
+  const stepUnits = block.units.filter((u) => !inSquare.has(u));
+  for (const s of squares) {
+    stepUnits.push({
+      kind: 'segment',
+      square: s,
+      x: s.region.x0,
+      y: s.region.y0,
+      w: s.region.x1 - s.region.x0,
+      h: s.region.y1 - s.region.y0,
+      pieces: s.units.flatMap((u) => u.pieces),
+    });
+  }
+  const stepTree = squares.length ? decompose(stepUnits, region) : tree;
+  const leafName = (u) => {
+    if (u.kind === 'segment') {
+      const s = u.square;
+      const lead = F(s.units[0].a);
+      return `the ${ROW_NAME(s.row, s.n)}-${COL_NAME(s.col, s.n)} strip square (strips running ${s.across ? `across, ${lead} at the top` : `up and down, ${lead} on the left`})`;
+    }
+    const own = u.pieces.filter((p) => p.role !== 'corner').map((p) => p.label);
+    return u.kind === 'patch' ? own[0] ?? u.pieces[0].label : u.pieces.map((p) => p.label).join('/');
+  };
+  const labelsIn = (node) =>
+    node.type === 'unit' ? node.unit.pieces.map((p) => p.label)
+      : node.type === 'partial' ? node.units.flatMap((u) => u.pieces.map((p) => p.label))
+        : node.children.flatMap(labelsIn);
+  const stepOf = new Map();
+  const build = (node) => {
+    if (node.type === 'unit') return;
+    const labels = labelsIn(node);
+    if (node.type === 'partial') {
+      steps.push({
+        phase: 'assembly',
+        region: node.region,
+        labels,
+        added: labels,
+        text: `Sew ${listOf(node.units.map(leafName))} together with a partial seam: sew part of the first seam, add the pieces around it in turn, then come back and finish it.`,
+      });
+      stepOf.set(node, steps.length);
+      return;
+    }
+    node.children.forEach(build);
+    const down = node.type === 'rows';
+    const kids = node.children;
+    const name = (k) => (k.type === 'unit' ? leafName(k.unit) : `the step ${stepOf.get(k)} unit`);
+    const builtAt = kids.map((k, i) => (k.type === 'unit' ? -1 : i)).filter((i) => i >= 0);
+    let text;
+    if (!builtAt.length) {
+      text = `Sew ${listOf(kids.map(name))} together, ${down ? 'top to bottom' : 'left to right'}.`;
+    } else if (builtAt.length === 1) {
+      const k = builtAt[0];
+      const before = kids.slice(0, k).map(name);
+      const after = kids.slice(k + 1).map(name);
+      const [first, last] = down ? ['top', 'bottom'] : ['left', 'right'];
+      const parts = [];
+      if (before.length) parts.push(`${listOf(before)} to the ${first}`);
+      if (after.length) parts.push(`${listOf(after)} to the ${last}`);
+      text = `Sew ${parts.join(' and ')} of ${name(kids[k])}.`;
+    } else {
+      text = `Join ${listOf(kids.map(name))}, ${down ? 'top to bottom' : 'left to right'}.`;
+    }
     steps.push({
       phase: 'assembly',
       depth: node.depth,
-      text:
-        `Sew ${path} as ${kids} ${dir}, then join the ${dir} with ` +
-        `${kids - 1} ${seamDir} seam${kids - 1 === 1 ? '' : 's'}.`,
+      region: node.region,
+      labels,
+      added: kids.filter((k) => k.type === 'unit').flatMap(labelsIn),
+      text,
     });
-    node.children.forEach((c, i) => describe(c, `${dir.slice(0, -1)} ${i + 1}`));
+    stepOf.set(node, steps.length);
   };
-  describe(tree);
+  build(stepTree);
 
   const partials = seams.filter((s) => s.type === 'partial');
   const pressOpen = seams.filter((s) => s.press === 'open');

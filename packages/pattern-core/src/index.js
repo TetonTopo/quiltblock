@@ -33,7 +33,7 @@ import { buildBlock, mirrorDef, validSizes, DEFAULT_CORNERS } from './block.js';
 import { planAssembly, seamStats } from './assembly.js';
 import { cuttingList } from './cutting.js';
 import { validateBlock, difficultyOf } from './validate.js';
-import { blockSvg, quiltSvg, explodedSvg, coloringSvg, unitSvg, quiltLayoutSvg } from './render.js';
+import { blockSvg, quiltSvg, explodedSvg, coloringSvg, unitSvg, stepSvg, quiltLayoutSvg } from './render.js';
 import { fppSections, fppTemplateSvg, fppCuttingList, fppInstructions } from './fpp.js';
 import { DEFAULT_SEAM, DEFAULT_TRIM, seamMath } from './seams.js';
 import { applyColorway } from './colorways.js';
@@ -87,6 +87,7 @@ export function makePattern(def, opts = {}) {
     exploded: (o = {}) => explodedSvg(block, plan, o),
     coloring: (o = {}) => coloringSvg(block, o),
     unitSvg: (unit, o = {}) => unitSvg(block, unit, o),
+    stepSvg: (step, o = {}) => stepSvg(block, step, o),
     quiltSvg: (o = {}) => quiltSvg(block, o),
 
     /** The same block facing the other way. */

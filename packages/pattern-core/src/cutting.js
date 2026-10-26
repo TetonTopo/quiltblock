@@ -16,6 +16,7 @@
 
 import { fmt, fmtSize, toInches, inches } from './units.js';
 import { seamMath } from './seams.js';
+import { stripSquares } from './assembly.js';
 
 /** Usable width across the bolt once the selvedges are gone. */
 export const USABLE_WOF = inches(40);
@@ -50,9 +51,31 @@ export function addBlockCuts(groups, block, math, copies = 1, { forLabel = '' } 
   const F = (k) => block.fabrics[k]?.name ?? k;
   const tag = forLabel ? ` (${forLabel})` : '';
 
+  // --- strip sets: the strips of a rail fence are cut long and sewn first,
+  // then the set is cut into squares. Counted here as segments; finishGroups
+  // turns that into strips once every copy is in.
+  const inStrip = new Map();
+  for (const sq of stripSquares(block)) for (const u of sq.units) inStrip.set(u, sq);
+  for (const [u, sq] of inStrip) {
+    const width = sq.across ? u.h : u.w;
+    const cutW = math.patch(width, width).w;
+    const segLen = math.patch(sq.side, sq.side).w;
+    const e = addEntry(groups, u.a, `strip:${cutW}:${segLen}`, {
+      construction: 'strip',
+      cutW,
+      cutH: segLen,
+      segLen,
+      finished: `${fmt(width)} strips`,
+      purpose: 'strip set: sew the strips together, then cut into squares' + tag,
+    });
+    e.qty += copies;
+    e.units += 1;
+    e.labels.push(...u.pieces.map((p) => p.label));
+  }
+
   // --- plain patches: one cut rectangle each -------------------------------
   for (const u of block.units) {
-    if (u.kind !== 'patch') continue;
+    if (u.kind !== 'patch' || inStrip.has(u)) continue;
     const { w, h } = math.patch(u.w, u.h);
     const hasCorners = u.corners?.length > 0;
     const e = addEntry(groups, u.a, `patch:${w}x${h}:${hasCorners ? 'flip' : ''}`, {
@@ -214,6 +237,16 @@ export function finishGroups(groups, fabricsMap = {}) {
     const entries = [...m.values()].sort((a, b) => b.cutW * b.cutH - a.cutW * a.cutH);
     for (const e of entries) {
       e.labels = [...new Set(e.labels)].sort();
+      if (e.construction === 'strip' && !e.segments) {
+        // qty counted segments; a strip is as long as the segments it feeds,
+        // up to the width of the fabric.
+        e.segments = e.qty;
+        const perStrip = Math.max(1, Math.floor(USABLE_WOF / e.segLen));
+        e.qty = Math.ceil(e.segments / perStrip);
+        e.cutH = e.qty === 1 ? e.segments * e.segLen : USABLE_WOF;
+        e.cut = e.qty === 1 ? fmtSize(e.cutW, e.cutH) + ' strip' : `${fmt(e.cutW)} × width-of-fabric strip${e.qty === 1 ? '' : 's'}`;
+        e.yields = `sewn into the strip set, cut into ${e.segments} ${fmt(e.segLen)} square${e.segments === 1 ? '' : 's'}`;
+      }
       if (e.per) {
         const made = e.qty * e.per;
         e.yields =

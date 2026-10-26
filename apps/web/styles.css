@@ -447,3 +447,6 @@ table.spec td.qty { white-space: nowrap; }
   .tile.landscape { page: tile-landscape; }
   .tile svg { display: block; }
 }
+ol.steps-list .step-row, .step-row { display: flex; gap: 14px; align-items: flex-start; }
+.step-pic { flex: none; line-height: 0; }
+.step-pic svg { display: block; max-width: 140px; height: auto; }
